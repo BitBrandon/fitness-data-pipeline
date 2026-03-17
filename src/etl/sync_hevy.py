@@ -1,6 +1,13 @@
 import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+import os
+from openai import OpenAI
+from dotenv import load_dotenv
+
+load_dotenv()
+
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 CSV_PATH = "data/workouts.csv"
 
@@ -174,6 +181,70 @@ def upload_weekly(df):
 
     sheet.update(data)
 
+def generate_summary(df, weekly, prs):
+
+    latest_week = weekly.iloc[-1]
+    prev_week = weekly.iloc[-2] if len(weekly) > 1 else None
+
+    summary = []
+
+    summary.append(f"Week: {latest_week['week']}")
+    summary.append(f"Total volume: {int(latest_week['total_volume'])} kg")
+
+    if prev_week is not None:
+        diff = latest_week["total_volume"] - prev_week["total_volume"]
+
+        if diff > 0:
+            summary.append(f"Volume increased by {int(diff)} kg vs last week")
+        else:
+            summary.append(f"Volume decreased by {int(abs(diff))} kg vs last week")
+
+    # ejercicio más trabajado
+    top_ex = df.groupby("exercise")["volume"].sum().idxmax()
+    summary.append(f"Top exercise: {top_ex}")
+
+    # último PR
+    last_pr = prs.iloc[-1]
+    summary.append(f"Latest PR: {last_pr['exercise']} - {last_pr['pr_weight']} kg")
+
+    return "\n".join(summary)
+
+def generate_ai_summary(summary_text):
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4.1-mini",
+            messages=[
+                {"role": "user", "content": summary_text}
+            ]
+        )
+
+        return response.choices[0].message.content
+
+    except Exception as e:
+
+        print("\n⚠️ AI not available, using fallback...\n")
+
+        return generate_fallback_summary(summary_text)
+    
+def generate_fallback_summary(summary_text):
+
+    lines = summary_text.split("\n")
+
+    analysis = []
+
+    for line in lines:
+
+        if "decreased" in line:
+            analysis.append("Training volume has decreased, consider increasing intensity.")
+
+        if "increased" in line:
+            analysis.append("Good progression, volume is increasing.")
+
+    analysis.append("Keep consistency and monitor fatigue.")
+
+    return "\n".join(analysis)
+
 def main():
 
     df = load_workouts()
@@ -183,6 +254,7 @@ def main():
     summary = build_exercise_summary(df)
     weekly = build_weekly_volume(df)
     prs = build_prs(df)
+    summary_text = generate_summary(df, weekly, prs)
 
     print("Uploading workouts...")
     upload_to_sheets(df)
@@ -197,6 +269,15 @@ def main():
     upload_prs(prs)
 
     print("Pipeline complete")
-    
+    summary_text = generate_summary(df, weekly, prs)
+
+    print("\n===== BASIC SUMMARY =====\n")
+    print(summary_text)
+
+    ai_summary = generate_ai_summary(summary_text)
+
+    print("\n===== AI SUMMARY =====\n")
+    print(ai_summary)
+
 if __name__ == "__main__":
     main()

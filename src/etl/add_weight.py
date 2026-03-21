@@ -1,6 +1,5 @@
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
+from src.storage.sheets_client import get_gspread_client
 
 
 def add_weight(weight):
@@ -9,17 +8,7 @@ def add_weight(weight):
 
     new_row = [date, weight]
 
-    scope = [
-        "https://spreadsheets.google.com/feeds",
-        "https://www.googleapis.com/auth/drive"
-    ]
-
-    creds = ServiceAccountCredentials.from_json_keyfile_name(
-        "credentials.json",
-        scope
-    )
-
-    client = gspread.authorize(creds)
+    client = get_gspread_client()
 
     sheet = client.open("fitness_data").worksheet("body_weight")
 

@@ -1,9 +1,8 @@
 import pandas as pd
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 import os
 from openai import OpenAI
 from dotenv import load_dotenv
+from src.storage.sheets_client import get_gspread_client
 
 load_dotenv()
 
@@ -55,17 +54,7 @@ def build_exercise_summary(df):
 
 def upload_to_sheets(df):
 
-    scope = [
-        "https://spreadsheets.google.com/feeds",
-        "https://www.googleapis.com/auth/drive"
-    ]
-
-    creds = ServiceAccountCredentials.from_json_keyfile_name(
-        "credentials.json",
-        scope
-    )
-
-    client = gspread.authorize(creds)
+    client = get_gspread_client()
 
     sheet = client.open("fitness_data").worksheet("workouts")
 
@@ -79,17 +68,7 @@ def upload_to_sheets(df):
 
 def upload_summary(df):
 
-    scope = [
-        "https://spreadsheets.google.com/feeds",
-        "https://www.googleapis.com/auth/drive"
-    ]
-
-    creds = ServiceAccountCredentials.from_json_keyfile_name(
-        "credentials.json",
-        scope
-    )
-
-    client = gspread.authorize(creds)
+    client = get_gspread_client()
 
     sheet = client.open("fitness_data").worksheet("exercise_summary")
 
@@ -140,17 +119,7 @@ def build_prs(df):
 
 def upload_prs(df):
 
-    scope = [
-        "https://spreadsheets.google.com/feeds",
-        "https://www.googleapis.com/auth/drive"
-    ]
-
-    creds = ServiceAccountCredentials.from_json_keyfile_name(
-        "credentials.json",
-        scope
-    )
-
-    client = gspread.authorize(creds)
+    client = get_gspread_client()
 
     sheet = client.open("fitness_data").worksheet("prs")
 
@@ -161,17 +130,7 @@ def upload_prs(df):
     sheet.update(data)
 def upload_weekly(df):
 
-    scope = [
-        "https://spreadsheets.google.com/feeds",
-        "https://www.googleapis.com/auth/drive"
-    ]
-
-    creds = ServiceAccountCredentials.from_json_keyfile_name(
-        "credentials.json",
-        scope
-    )
-
-    client = gspread.authorize(creds)
+    client = get_gspread_client()
 
     sheet = client.open("fitness_data").worksheet("weekly_volume")
 
@@ -181,6 +140,32 @@ def upload_weekly(df):
 
     sheet.update(data)
 
+def upload_daily_summary(summary_text):
+
+    client = get_gspread_client()
+
+    sheet = client.open("fitness_data").worksheet("daily_summary")
+
+    date = pd.Timestamp.now().strftime("%Y-%m-%d")
+
+    records = sheet.get_all_records()
+
+    for record in records:
+        if str(record.get("date")) == date:
+            return
+
+    sheet.append_row([date, summary_text])
+
+def upload_ai_summary(ai_summary):
+
+    client = get_gspread_client()
+
+    sheet = client.open("fitness_data").worksheet("ai_summary")
+
+    date = pd.Timestamp.now().strftime("%Y-%m-%d")
+
+    sheet.append_row([date, ai_summary])
+
 def generate_summary(df, weekly, prs):
 
     latest_week = weekly.iloc[-1]
@@ -188,24 +173,25 @@ def generate_summary(df, weekly, prs):
 
     summary = []
 
-    summary.append(f"Week: {latest_week['week']}")
-    summary.append(f"Total volume: {int(latest_week['total_volume'])} kg")
+    summary.append("Daily Training Report")
+    summary.append(f"- Week: {latest_week['week']}")
+    summary.append(f"- Total volume: {int(latest_week['total_volume'])} kg")
 
     if prev_week is not None:
         diff = latest_week["total_volume"] - prev_week["total_volume"]
 
         if diff > 0:
-            summary.append(f"Volume increased by {int(diff)} kg vs last week")
+            summary.append(f"- Volume increased by {int(diff)} kg vs last week")
         else:
-            summary.append(f"Volume decreased by {int(abs(diff))} kg vs last week")
+            summary.append(f"- Volume decreased by {int(abs(diff))} kg vs last week")
 
     # ejercicio más trabajado
     top_ex = df.groupby("exercise")["volume"].sum().idxmax()
-    summary.append(f"Top exercise: {top_ex}")
+    summary.append(f"- Top exercise: {top_ex}")
 
     # último PR
     last_pr = prs.iloc[-1]
-    summary.append(f"Latest PR: {last_pr['exercise']} - {last_pr['pr_weight']} kg")
+    summary.append(f"- Latest PR: {last_pr['exercise']} - {last_pr['pr_weight']} kg")
 
     return "\n".join(summary)
 
@@ -255,6 +241,7 @@ def main():
     weekly = build_weekly_volume(df)
     prs = build_prs(df)
     summary_text = generate_summary(df, weekly, prs)
+    upload_daily_summary(summary_text)
 
     print("Uploading workouts...")
     upload_to_sheets(df)

@@ -1,26 +1,8 @@
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 
 from src.etl.sync_hevy import main as sync_hevy_main
 from src.etl.add_weight import add_weight
-
-
-def get_gspread_client():
-
-    scope = [
-        "https://spreadsheets.google.com/feeds",
-        "https://www.googleapis.com/auth/drive"
-    ]
-
-    creds = ServiceAccountCredentials.from_json_keyfile_name(
-        "credentials.json",
-        scope
-    )
-
-    client = gspread.authorize(creds)
-
-    return client
+from src.storage.sheets_client import get_gspread_client
 
 
 def weight_already_logged():

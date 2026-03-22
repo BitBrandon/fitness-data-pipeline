@@ -2,17 +2,21 @@ import pandas as pd
 import os
 from openai import OpenAI
 from dotenv import load_dotenv
-from src.storage.sheets_client import get_gspread_client
+from src.storage.sheets_client import get_gspread_client, get_prepared_worksheet
 
 load_dotenv()
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-CSV_PATH = "data/workouts.csv"
+
+def with_user_id(df, user_id):
+    df = df.copy()
+    df.insert(0, "user_id", user_id)
+    return df
 
 
-def load_workouts():
-    df = pd.read_csv(CSV_PATH)
+def load_workouts(csv_path):
+    df = pd.read_csv(csv_path)
     return df
 
 
@@ -52,31 +56,18 @@ def build_exercise_summary(df):
 
     return summary
 
-def upload_to_sheets(df):
-
-    client = get_gspread_client()
-
-    sheet = client.open("fitness_data").worksheet("workouts")
-
-    sheet.clear()
+def upload_to_sheets(df, user_id):
+    sheet = get_prepared_worksheet("fitness_data", "workouts")
+    df = with_user_id(df, user_id)
 
     df["date"] = df["date"].astype(str)
 
-    data = [df.columns.values.tolist()] + df.values.tolist()
+    sheet.append_rows(df.values.tolist())
 
-    sheet.update(data)
-
-def upload_summary(df):
-
-    client = get_gspread_client()
-
-    sheet = client.open("fitness_data").worksheet("exercise_summary")
-
-    sheet.clear()
-
-    data = [df.columns.values.tolist()] + df.values.tolist()
-
-    sheet.update(data)
+def upload_summary(df, user_id):
+    sheet = get_prepared_worksheet("fitness_data", "exercise_summary")
+    df = with_user_id(df, user_id)
+    sheet.append_rows(df.values.tolist())
 
 def build_weekly_volume(df):
 
@@ -117,44 +108,31 @@ def build_prs(df):
 
     return pd.DataFrame(prs)
 
-def upload_prs(df):
+def upload_prs(df, user_id):
+    sheet = get_prepared_worksheet("fitness_data", "prs")
+    df = with_user_id(df, user_id)
+    sheet.append_rows(df.values.tolist())
 
-    client = get_gspread_client()
+def upload_weekly(df, user_id):
+    sheet = get_prepared_worksheet("fitness_data", "weekly_volume")
+    df = with_user_id(df, user_id)
+    sheet.append_rows(df.values.tolist())
 
-    sheet = client.open("fitness_data").worksheet("prs")
-
-    sheet.clear()
-
-    data = [df.columns.values.tolist()] + df.values.tolist()
-
-    sheet.update(data)
-def upload_weekly(df):
-
-    client = get_gspread_client()
-
-    sheet = client.open("fitness_data").worksheet("weekly_volume")
-
-    sheet.clear()
-
-    data = [df.columns.values.tolist()] + df.values.tolist()
-
-    sheet.update(data)
-
-def upload_daily_summary(summary_text):
-
-    client = get_gspread_client()
-
-    sheet = client.open("fitness_data").worksheet("daily_summary")
+def upload_daily_summary(summary_text, user_id):
+    sheet = get_prepared_worksheet("fitness_data", "daily_summary")
 
     date = pd.Timestamp.now().strftime("%Y-%m-%d")
 
     records = sheet.get_all_records()
 
     for record in records:
-        if str(record.get("date")) == date:
+        if (
+            str(record.get("user_id")) == user_id
+            and str(record.get("date")) == date
+        ):
             return
 
-    sheet.append_row([date, summary_text])
+    sheet.append_row([user_id, date, summary_text])
 
 def upload_ai_summary(ai_summary):
 
@@ -231,9 +209,9 @@ def generate_fallback_summary(summary_text):
 
     return "\n".join(analysis)
 
-def main():
+def main(user_id, csv_path):
 
-    df = load_workouts()
+    df = load_workouts(csv_path)
     df = clean_workouts(df)
     df = transform_workouts(df)
 
@@ -241,19 +219,19 @@ def main():
     weekly = build_weekly_volume(df)
     prs = build_prs(df)
     summary_text = generate_summary(df, weekly, prs)
-    upload_daily_summary(summary_text)
+    upload_daily_summary(summary_text, user_id)
 
     print("Uploading workouts...")
-    upload_to_sheets(df)
+    upload_to_sheets(df, user_id)
 
     print("Uploading summary...")
-    upload_summary(summary)
+    upload_summary(summary, user_id)
 
     print("Uploading weekly volume...")
-    upload_weekly(weekly)
+    upload_weekly(weekly, user_id)
 
     print("Uploading PRs...")
-    upload_prs(prs)
+    upload_prs(prs, user_id)
 
     print("Pipeline complete")
     summary_text = generate_summary(df, weekly, prs)
@@ -267,4 +245,4 @@ def main():
     print(ai_summary)
 
 if __name__ == "__main__":
-    main()
+    main("default", "data/workouts.csv")

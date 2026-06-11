@@ -1,18 +1,24 @@
 import pandas as pd
 import os
-from openai import OpenAI
 from dotenv import load_dotenv
-from src.storage.sheets_client import get_gspread_client, get_prepared_worksheet
+from src.analysis.training_analysis import (
+    build_exercise_summary,
+    build_prs,
+    build_weekly_volume,
+    generate_summary,
+)
+from src.storage.repositories import append_new_dataframe
+from src.storage.sheets_client import get_prepared_worksheet
+
+try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None
 
 load_dotenv()
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-
-def with_user_id(df, user_id):
-    df = df.copy()
-    df.insert(0, "user_id", user_id)
-    return df
+openai_api_key = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=openai_api_key) if OpenAI and openai_api_key else None
 
 
 def load_workouts(csv_path):
@@ -31,9 +37,15 @@ def clean_workouts(df):
 
 def transform_workouts(df):
 
-    df = df[["title", "start_time", "exercise_title", "reps", "weight_kg"]]
+    required_columns = ["title", "start_time", "exercise_title", "set_index", "reps", "weight_kg"]
+    missing_columns = [column for column in required_columns if column not in df.columns]
 
-    df = df.dropna(subset=["reps", "weight_kg"])
+    if missing_columns:
+        raise ValueError(f"Missing required workout columns: {', '.join(missing_columns)}")
+
+    df = df[required_columns].copy()
+
+    df = df.dropna(subset=["reps", "weight_kg"]).copy()
 
     df["volume"] = df["reps"] * df["weight_kg"]
 
@@ -46,77 +58,40 @@ def transform_workouts(df):
 
     return df
 
-def build_exercise_summary(df):
-
-    summary = df.groupby("exercise").agg(
-        total_sets=("exercise", "count"),
-        max_weight=("weight", "max"),
-        total_volume=("volume", "sum")
-    ).reset_index()
-
-    return summary
-
 def upload_to_sheets(df, user_id):
-    sheet = get_prepared_worksheet("fitness_data", "workouts")
-    df = with_user_id(df, user_id)
-
+    df = df.copy()
     df["date"] = df["date"].astype(str)
-
-    sheet.append_rows(df.values.tolist())
+    return append_new_dataframe(
+        "workouts",
+        df,
+        user_id,
+        key_columns=["user_id", "workout", "date", "exercise", "set_index", "reps", "weight"],
+        legacy_key_columns=["user_id", "workout", "date", "exercise", "reps", "weight"],
+    )
 
 def upload_summary(df, user_id):
-    sheet = get_prepared_worksheet("fitness_data", "exercise_summary")
-    df = with_user_id(df, user_id)
-    sheet.append_rows(df.values.tolist())
-
-def build_weekly_volume(df):
-
-    df["date"] = pd.to_datetime(df["date"], format="%d %b %Y, %H:%M")
-
-    df["week"] = df["date"].dt.to_period("W").astype(str)
-
-    weekly = df.groupby("week").agg(
-        total_volume=("volume", "sum"),
-        total_sets=("exercise", "count")
-    ).reset_index()
-
-    return weekly
-
-def build_prs(df):
-
-    df_copy = df.copy()
-
-    df_copy["date"] = pd.to_datetime(df_copy["date"], format="%d %b %Y, %H:%M")
-
-    df_copy = df_copy.sort_values(by="date")
-
-    prs = []
-
-    for exercise in df_copy["exercise"].unique():
-
-        ex_df = df_copy[df_copy["exercise"] == exercise]
-
-        max_weight = ex_df["weight"].max()
-
-        pr_row = ex_df[ex_df["weight"] == max_weight].iloc[0]
-
-        prs.append({
-            "exercise": exercise,
-            "pr_weight": max_weight,
-            "date": str(pr_row["date"])  # 👈 importante
-        })
-
-    return pd.DataFrame(prs)
+    return append_new_dataframe(
+        "exercise_summary",
+        df,
+        user_id,
+        key_columns=["user_id", "exercise"],
+    )
 
 def upload_prs(df, user_id):
-    sheet = get_prepared_worksheet("fitness_data", "prs")
-    df = with_user_id(df, user_id)
-    sheet.append_rows(df.values.tolist())
+    return append_new_dataframe(
+        "prs",
+        df,
+        user_id,
+        key_columns=["user_id", "exercise"],
+    )
 
 def upload_weekly(df, user_id):
-    sheet = get_prepared_worksheet("fitness_data", "weekly_volume")
-    df = with_user_id(df, user_id)
-    sheet.append_rows(df.values.tolist())
+    return append_new_dataframe(
+        "weekly_volume",
+        df,
+        user_id,
+        key_columns=["user_id", "week"],
+    )
 
 def upload_daily_summary(summary_text, user_id):
     sheet = get_prepared_worksheet("fitness_data", "daily_summary")
@@ -130,50 +105,16 @@ def upload_daily_summary(summary_text, user_id):
             str(record.get("user_id")) == user_id
             and str(record.get("date")) == date
         ):
-            return
+            return 0
 
     sheet.append_row([user_id, date, summary_text])
-
-def upload_ai_summary(ai_summary):
-
-    client = get_gspread_client()
-
-    sheet = client.open("fitness_data").worksheet("ai_summary")
-
-    date = pd.Timestamp.now().strftime("%Y-%m-%d")
-
-    sheet.append_row([date, ai_summary])
-
-def generate_summary(df, weekly, prs):
-
-    latest_week = weekly.iloc[-1]
-    prev_week = weekly.iloc[-2] if len(weekly) > 1 else None
-
-    summary = []
-
-    summary.append("Daily Training Report")
-    summary.append(f"- Week: {latest_week['week']}")
-    summary.append(f"- Total volume: {int(latest_week['total_volume'])} kg")
-
-    if prev_week is not None:
-        diff = latest_week["total_volume"] - prev_week["total_volume"]
-
-        if diff > 0:
-            summary.append(f"- Volume increased by {int(diff)} kg vs last week")
-        else:
-            summary.append(f"- Volume decreased by {int(abs(diff))} kg vs last week")
-
-    # ejercicio más trabajado
-    top_ex = df.groupby("exercise")["volume"].sum().idxmax()
-    summary.append(f"- Top exercise: {top_ex}")
-
-    # último PR
-    last_pr = prs.iloc[-1]
-    summary.append(f"- Latest PR: {last_pr['exercise']} - {last_pr['pr_weight']} kg")
-
-    return "\n".join(summary)
+    return 1
 
 def generate_ai_summary(summary_text):
+
+    if client is None:
+        print("\nAI not configured, using fallback...\n")
+        return generate_fallback_summary(summary_text)
 
     try:
         response = client.chat.completions.create(
@@ -185,12 +126,12 @@ def generate_ai_summary(summary_text):
 
         return response.choices[0].message.content
 
-    except Exception as e:
+    except Exception:
 
-        print("\n⚠️ AI not available, using fallback...\n")
+        print("\nAI not available, using fallback...\n")
 
         return generate_fallback_summary(summary_text)
-    
+
 def generate_fallback_summary(summary_text):
 
     lines = summary_text.split("\n")
@@ -219,21 +160,26 @@ def main(user_id, csv_path):
     weekly = build_weekly_volume(df)
     prs = build_prs(df)
     summary_text = generate_summary(df, weekly, prs)
-    upload_daily_summary(summary_text, user_id)
+    daily_summary_rows = upload_daily_summary(summary_text, user_id)
 
     print("Uploading workouts...")
-    upload_to_sheets(df, user_id)
+    workout_rows = upload_to_sheets(df, user_id)
+    print(f"Added {workout_rows} workout rows")
 
     print("Uploading summary...")
-    upload_summary(summary, user_id)
+    summary_rows = upload_summary(summary, user_id)
+    print(f"Added {summary_rows} exercise summary rows")
 
     print("Uploading weekly volume...")
-    upload_weekly(weekly, user_id)
+    weekly_rows = upload_weekly(weekly, user_id)
+    print(f"Added {weekly_rows} weekly volume rows")
 
     print("Uploading PRs...")
-    upload_prs(prs, user_id)
+    pr_rows = upload_prs(prs, user_id)
+    print(f"Added {pr_rows} PR rows")
 
     print("Pipeline complete")
+    print(f"Added {daily_summary_rows} daily summary rows")
     summary_text = generate_summary(df, weekly, prs)
 
     print("\n===== BASIC SUMMARY =====\n")
@@ -246,3 +192,4 @@ def main(user_id, csv_path):
 
 if __name__ == "__main__":
     main("default", "data/workouts.csv")
+

@@ -1,111 +1,101 @@
 # Fitness Data Pipeline
 
-Personal automation system that collects fitness and health data from different sources and generates insights about training, recovery and daily performance.
+Personal wellness data platform for collecting training, activity, body metrics and recovery data in one place, then generating useful AI-assisted insights.
 
-The goal of this project is to build a **personal quantified-self platform** using APIs, automation workflows and AI-powered summaries.
+The project is starting as a Python data pipeline backed by Google Sheets, and is intended to evolve into a small personal app, potentially an Android APK, for daily health and fitness feedback.
 
----
+## Current MVP
 
-# Project Goal
+The current implementation can:
 
-Create an automated pipeline that gathers data from:
+- Read workout data from a Hevy CSV export.
+- Transform workout sets with pandas.
+- Store workouts, weekly volume, exercise summaries, PRs and body weight in Google Sheets.
+- Generate a basic training summary.
+- Optionally generate an AI summary when OpenAI credentials are available.
 
-• gym workouts
-• body weight measurements
-• sleep and recovery metrics (future)
-• nutrition data (future)
+## Product Vision
 
-and transforms them into structured datasets for analysis.
+The long-term goal is a personal wellness assistant that centralizes data from:
 
----
+- Hevy workouts.
+- Fitbit Charge 6 / Google Health / Health Connect.
+- Body weight.
+- Sleep and recovery metrics.
+- Nutrition data in a later phase.
 
-# Architecture
+The assistant should explain trends in plain language, for example:
 
-```
+- Weekly training progression.
+- Weight changes.
+- Sleep and recovery impact.
+- Activity consistency.
+- Suggested areas to improve.
+
+The system should support multiple users from the beginning, such as Brandon and his partner, by keeping every stored record linked to a `user_id`.
+
+## Architecture
+
+```text
 Data Sources
-────────────
-Hevy (workouts)
-Smart scale (weight)
-Smart ring (future)
+  Hevy CSV / Hevy API
+  Fitbit API / Health Connect
+  Manual weight input
+  Future nutrition sources
 
-↓
-
-Python ETL Scripts
-
-↓
-
-Google Sheets (cloud storage)
-
-↓
-
-Analysis Layer
-
-↓
-
-AI Assistant / Dashboard
-```
-
----
-
-# First Version (MVP)
-
-The first version of the system focuses on:
-
-• extracting workout data from Hevy API
-• storing data automatically in Google Sheets
-• tracking body weight progression
-
----
-
-# Future Features
-
-• sleep and recovery tracking
-• nutrition logging
-• AI generated daily summaries
-• automation workflows using n8n
-• voice assistant integration
-
----
-
-# Tech Stack
-
-Core
-
-* Python
-* REST APIs
-* Pandas
+Python ETL
+  Load
+  Clean
+  Transform
+  Validate
 
 Storage
-
-* Google Sheets API
-
-Automation (future)
-
-* n8n
-* Home Assistant
+  Google Sheets as MVP database
 
 Analysis
+  Weekly metrics
+  Trends
+  Recovery signals
 
-* Python data analysis
-* AI summarization
+AI Assistant
+  Daily summaries
+  Weekly feedback
+  Personalized recommendations
 
----
+Future App
+  Mobile interface / Android APK
+```
 
-# Why This Project
+## Repository Layout
 
-This project combines:
+```text
+src/
+  api/          External API clients.
+  etl/          Data ingestion and transformation scripts.
+  storage/      Google Sheets access and persistence helpers.
+  analysis/     Metrics and trend analysis.
+  ai/           AI prompts and wellness agent logic.
+  pipeline/     Pipeline orchestration entrypoints.
 
-• automation
-• APIs
-• data engineering
-• personal analytics
+data/           Local sample data.
+docs/           Project context, roadmap and design notes.
+```
 
-It is designed both as a **personal tool** and a **technical portfolio project**.
+## Main Entry Point
 
----
+Run the current interactive pipeline with:
 
-# Author
+```bash
+python -m src.pipeline.run_pipeline
+```
 
-Brandon
+## Documentation
 
-Technical consultant interested in automation, integrations and backend systems.
+Start with:
+
+- [Project Context](docs/PROJECT_CONTEXT.md)
+- [Setup And Validation](docs/SETUP.md)
+
+## Notes
+
+This project is a personal tool and portfolio project. The current Google Sheets backend is intentionally simple for the MVP, but the code should stay modular enough to migrate later to a real database if needed.

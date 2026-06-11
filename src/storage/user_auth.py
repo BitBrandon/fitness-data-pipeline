@@ -15,7 +15,7 @@ def get_users_worksheet():
 
 def get_users():
     sheet = get_users_worksheet()
-    return sheet.get_all_records()
+    return sheet.get_all_records(numericise_ignore=["all"])
 
 
 def get_user_record(username):
@@ -116,13 +116,18 @@ def authenticate_user():
             continue
 
         if user_exists(username):
-            while True:
+            for attempt in range(3):
                 password = input("Password: ")
 
                 if validate_user_password(username, password):
                     return username
 
-                print("Incorrect password. Try again.")
+                remaining = 2 - attempt
+                if remaining > 0:
+                    print(f"Contraseña incorrecta. {remaining} intento(s) restante(s).")
+                else:
+                    print("Demasiados intentos fallidos. Prueba de nuevo con otro usuario.")
+                    return None
 
         create_choice = input("User does not exist. Create it? (y/n): ").strip().lower()
 

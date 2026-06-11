@@ -3,3 +3,12 @@ __pycache__/
 .env
 credentials.json
 *.pyc
+
+# OAuth tokens
+token_google_fit.json
+token*.json
+
+# Next.js
+frontend/.next/
+frontend/node_modules/
+frontend/.env.local

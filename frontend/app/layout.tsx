@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/lib/theme";
+import { SettingsProvider } from "@/lib/settings";
 
 const geist = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 
@@ -21,7 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es" className={`${geist.variable} h-full`} data-theme="dark">
       <body className="min-h-full">
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider><SettingsProvider>{children}</SettingsProvider></ThemeProvider>
       </body>
     </html>
   );

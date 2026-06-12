@@ -3,15 +3,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import MonsterLogo from "./MonsterLogo";
 import { useTheme } from "@/lib/theme";
-
-const SECTIONS = [
-  { href: "/dashboard",   label: "Inicio",      icon: "⊞" },
-  { href: "/sleep",       label: "Sueño",       icon: "🌙" },
-  { href: "/activity",    label: "Actividad",   icon: "👟" },
-  { href: "/heart-rate",  label: "Pulso",       icon: "❤️" },
-  { href: "/workouts",    label: "Entrenos",    icon: "💪" },
-  { href: "/body",        label: "Cuerpo",      icon: "⚖️" },
-];
+import { useSettings } from "@/lib/settings";
 
 function NavItem({ href, label, icon, active }: { href: string; label: string; icon: string; active: boolean }) {
   return (
@@ -29,15 +21,14 @@ function NavItem({ href, label, icon, active }: { href: string; label: string; i
   );
 }
 
-export default function Nav({ username, onSync, onLogout, syncing, syncMsg }: {
+export default function Nav({ username, onSync, onLogout }: {
   username: string;
   onSync: () => void;
   onLogout: () => void;
-  syncing: boolean;
-  syncMsg: string;
 }) {
   const pathname = usePathname();
   const { theme, toggle } = useTheme();
+  const { visibleSections, openSettings } = useSettings();
 
   return (
     <>
@@ -63,32 +54,36 @@ export default function Nav({ username, onSync, onLogout, syncing, syncMsg }: {
 
         {/* Nav links */}
         <nav className="flex-1 px-3 py-4 space-y-1">
-          {SECTIONS.map(s => (
-            <NavItem key={s.href} {...s} active={pathname === s.href} />
+          {visibleSections.map(s => (
+            <NavItem key={s.href} href={s.href} label={s.label} icon={s.icon} active={pathname === s.href} />
           ))}
         </nav>
 
         {/* User + actions */}
         <div className="px-3 py-4 space-y-2" style={{ borderTop: "1px solid var(--border-col)" }}>
-          {syncMsg && <p className="text-xs text-[#FFD600] text-center">{syncMsg}</p>}
           <button
             onClick={onSync}
-            disabled={syncing}
-            className="w-full text-xs bg-[#8B0057]/20 hover:bg-[#8B0057]/30 border border-[#8B0057]/40 px-3 py-2 rounded-xl transition-colors disabled:opacity-50"
+            className="w-full text-xs bg-[#8B0057]/20 hover:bg-[#8B0057]/30 border border-[#8B0057]/40 px-3 py-2 rounded-xl transition-colors"
             style={{ color: "var(--text-primary)" }}
           >
-            {syncing ? "Sincronizando…" : "↻ Sincronizar datos"}
+            ↻ Sincronizar datos
           </button>
           <div className="flex items-center justify-between px-1">
             <span className="text-xs" style={{ color: "var(--text-muted)" }}>@{username}</span>
             <div className="flex items-center gap-2">
-              {/* Theme toggle */}
               <button
                 onClick={toggle}
                 className="text-sm hover:opacity-80 transition-opacity"
                 title={theme === "dark" ? "Modo claro" : "Modo oscuro"}
               >
                 {theme === "dark" ? "☀️" : "🌙"}
+              </button>
+              <button
+                onClick={openSettings}
+                className="text-sm hover:opacity-80 transition-opacity"
+                title="Ajustes"
+              >
+                ⚙️
               </button>
               <button
                 onClick={onLogout}
@@ -115,35 +110,15 @@ export default function Nav({ username, onSync, onLogout, syncing, syncMsg }: {
           </span>
         </div>
         <div className="flex items-center gap-3">
-          {syncMsg && <span className="text-xs text-[#FFD600]">{syncMsg}</span>}
           <button onClick={toggle} className="text-sm" title="Cambiar tema">
             {theme === "dark" ? "☀️" : "🌙"}
           </button>
-          <button onClick={onSync} disabled={syncing} className="text-xs disabled:opacity-50" style={{ color: "var(--text-muted)" }}>
-            {syncing ? "…" : "↻"}
-          </button>
+          <button onClick={openSettings} className="text-sm" title="Ajustes">⚙️</button>
+          <button onClick={onSync} className="text-xs" style={{ color: "var(--text-muted)" }} title="Sincronizar">↻</button>
           <button onClick={onLogout} className="text-xs font-medium text-[#FF3B30]">Salir</button>
         </div>
       </header>
 
-      {/* Mobile bottom nav */}
-      <nav
-        className="md:hidden fixed bottom-0 left-0 right-0 z-20 flex"
-        style={{ background: "var(--bg-nav)", borderTop: "1px solid var(--border-col)" }}
-      >
-        {SECTIONS.map(s => (
-          <Link
-            key={s.href}
-            href={s.href}
-            className="flex-1 flex flex-col items-center py-2 gap-0.5 text-xs transition-colors"
-            style={{ color: pathname === s.href ? "var(--text-primary)" : "var(--text-muted)" }}
-          >
-            <span className="text-base">{s.icon}</span>
-            <span className="text-[9px] leading-none">{s.label}</span>
-            {pathname === s.href && <span className="w-1 h-1 rounded-full bg-[#FFD600]" />}
-          </Link>
-        ))}
-      </nav>
     </>
   );
 }

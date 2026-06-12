@@ -41,7 +41,7 @@ export default function BodyPage() {
   const first = data[0];
   const minW = data.length ? Math.min(...data.map(r => r.weight)) : 0;
   const maxW = data.length ? Math.max(...data.map(r => r.weight)) : 0;
-  const change = latest && first ? (latest.weight - first.weight).toFixed(1) : "—";
+  const change = latest && first ? (latest.weight - first.weight).toFixed(1) : ",";
   const changeNum = latest && first ? latest.weight - first.weight : 0;
 
   const chartData = data.map(r => ({ date: r.date.slice(5), weight: r.weight }));

@@ -8,7 +8,7 @@ import MetricBox from "@/components/MetricBox";
 import LoadingScreen from "@/components/LoadingScreen";
 
 function hrZone(avg: number): { zone: string; color: string; desc: string } {
-  if (avg < 60) return { zone: "Atlético", color: "#00C6FF", desc: "Ritmo cardíaco en reposo bajo — excelente forma física" };
+  if (avg < 60) return { zone: "Atlético", color: "#00C6FF", desc: "Ritmo cardíaco en reposo bajo, excelente forma física" };
   if (avg < 70) return { zone: "Bueno",    color: "#FFD600", desc: "Ritmo cardíaco saludable" };
   if (avg < 80) return { zone: "Normal",   color: "#FF9500", desc: "Rango normal para adultos" };
   return             { zone: "Elevado",    color: "#FF3B30", desc: "Por encima del rango normal" };

@@ -1,28 +1,16 @@
 "use client";
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Nav from "./Nav";
-import { api } from "@/lib/api";
+import RadialMenu from "./RadialMenu";
+import BotGuide from "./BotGuide";
+import SettingsModal from "./SettingsModal";
+import SyncModal from "./SyncModal";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const username = typeof window !== "undefined" ? (localStorage.getItem("username") ?? "") : "";
-  const [syncing, setSyncing] = useState(false);
-  const [syncMsg, setSyncMsg] = useState("");
-
-  const handleSync = useCallback(async () => {
-    setSyncing(true);
-    setSyncMsg("");
-    try {
-      await api.sync();
-      setSyncMsg("Sync iniciado ✓");
-      setTimeout(() => setSyncMsg(""), 3000);
-    } catch {
-      setSyncMsg("Error al sincronizar");
-    } finally {
-      setSyncing(false);
-    }
-  }, []);
+  const [syncOpen, setSyncOpen] = useState(false);
 
   function logout() {
     localStorage.removeItem("token");
@@ -32,10 +20,22 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)" }}>
-      <Nav username={username} onSync={handleSync} onLogout={logout} syncing={syncing} syncMsg={syncMsg} />
-      <div className="md:pl-56 pt-12 md:pt-0 pb-16 md:pb-0">
+      <Nav
+        username={username}
+        onSync={() => setSyncOpen(true)}
+        onLogout={logout}
+      />
+      <div className="md:pl-56 pt-12 md:pt-0 pb-28 md:pb-0">
         {children}
       </div>
+      <RadialMenu />
+      <BotGuide />
+      <SettingsModal />
+      <SyncModal
+        open={syncOpen}
+        onClose={() => setSyncOpen(false)}
+        onDone={() => window.location.reload()}
+      />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { login } from "@/lib/api";
+import { login, api } from "@/lib/api";
 import MonsterLogo from "@/components/MonsterLogo";
 import { useTheme } from "@/lib/theme";
 
@@ -21,6 +21,8 @@ export default function LoginPage() {
       const token = await login(username.trim().toLowerCase(), password);
       localStorage.setItem("token", token);
       localStorage.setItem("username", username.trim().toLowerCase());
+      // Fire sync silently in background — don't await, user goes straight to dashboard
+      api.sync(30).catch(() => {});
       router.replace("/dashboard");
     } catch {
       setError("Usuario o contraseña incorrectos");

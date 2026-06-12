@@ -71,7 +71,7 @@ export default function SleepPage() {
             <div>
               <p className="text-xs text-[#FFD600] uppercase tracking-wider">Mejor noche</p>
               <p className="text-sm" style={{ color: "var(--text-primary)" }}>
-                {best.date} — <span className="font-bold">{best.duration_hours}h</span>
+                {best.date}, <span className="font-bold">{best.duration_hours}h</span>
                 <span style={{ color: "var(--text-muted)" }}> ({best.deep_min}min profundo · {best.rem_min}min REM)</span>
               </p>
             </div>

@@ -48,7 +48,7 @@ SHEET_HEADERS = {
     "exercise_summary": ["user_id", "exercise", "total_sets", "max_weight", "total_volume"],
     "users": ["username", "password", "csv_path"],
     # Google Fit
-    "daily_activity": ["user_id", "date", "steps", "calories"],
+    "daily_activity": ["user_id", "date", "steps", "calories", "active_minutes"],
     "heart_rate_daily": ["user_id", "date", "hr_avg", "hr_max", "hr_min"],
     "sleep": ["user_id", "date", "duration_hours", "deep_min", "light_min", "rem_min", "awake_min"],
 }

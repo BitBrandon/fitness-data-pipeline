@@ -44,7 +44,7 @@ export async function login(username: string, password: string): Promise<string>
   return data.access_token;
 }
 
-export type ActivityRow  = { date: string; steps: number; calories: number };
+export type ActivityRow  = { date: string; steps: number; calories: number; active_minutes?: number };
 export type HeartRateRow = { date: string; hr_avg: number; hr_max: number; hr_min: number };
 export type SleepRow     = { date: string; duration_hours: number; deep_min: number; light_min: number; rem_min: number; awake_min: number };
 export type WorkoutRow   = { workout: string; date: string; exercise: string; reps: number; weight: number; volume: number };
@@ -58,5 +58,11 @@ export const api = {
   workouts:    () => get<WorkoutRow[]>("/workouts"),
   weeklyVolume:() => get<WeeklyRow[]>("/workouts/weekly-volume"),
   weight:      () => get<WeightRow[]>("/weight"),
-  sync:        () => fetch(`${BASE}/sync`, { method: "POST", headers: authHeaders() }),
+  sync:        (days = 30) => fetch(`${BASE}/sync?days=${days}`, { method: "POST", headers: authHeaders() }),
+  syncStatus:  () => get<{ state: string; pct: number; step: string; error: string | null }>("/sync/status"),
+  logWeight:   (weight: number) => fetch(`${BASE}/weight`, {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ weight }),
+  }),
 };

@@ -6,6 +6,7 @@ import { StepsChart, HeartRateChart, SleepChart, VolumeChart, Sparkline } from "
 import AppShell from "@/components/AppShell";
 import LoadingScreen from "@/components/LoadingScreen";
 import { useSettings } from "@/lib/settings";
+import { useTheme } from "@/lib/theme";
 
 const DEFAULT_STEP_GOAL    = 8000;
 const DEFAULT_CAL_GOAL     = 2000;
@@ -90,7 +91,9 @@ function StatTile({ icon, label, value, unit, color, spark, delay = 0 }: {
 }
 
 /* ── Weight bottom sheet ── */
-function WeightSheet({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+function WeightSheet({ onClose, onSaved, mainColor }: {
+  onClose: () => void; onSaved: () => void; mainColor: string;
+}) {
   const [val, setVal] = useState("");
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
@@ -120,13 +123,13 @@ function WeightSheet({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
           <input type="number" step="0.1" min="20" max="300" value={val}
             onChange={e => setVal(e.target.value)} onKeyDown={e => e.key === "Enter" && save()}
             className="flex-1 rounded-2xl px-4 py-4 text-3xl font-bold text-center focus:outline-none"
-            style={{ background: "var(--surface-2)", border: "1px solid #8B0057", color: "var(--text-primary)", boxShadow: "0 0 12px rgba(139,0,87,0.15)" }}
+            style={{ background: "var(--surface-2)", border: `1px solid var(--c-main)`, color: "var(--text-primary)", boxShadow: "0 0 12px var(--c-glow)" }}
             placeholder="70.5" autoFocus />
           <span className="text-xl font-semibold" style={{ color: "var(--text-muted)" }}>kg</span>
         </div>
         <button onClick={save} disabled={!val || saving}
           className="w-full py-3.5 rounded-2xl font-bold text-white transition-all disabled:opacity-40"
-          style={{ background: done ? "#00C950" : "linear-gradient(135deg,#8B0057,#620040)", boxShadow: "0 0 16px rgba(139,0,87,0.35)" }}>
+          style={{ background: done ? "#00C950" : `linear-gradient(135deg,${mainColor},${mainColor}CC)`, boxShadow: "0 0 16px var(--c-glow)" }}>
           {done ? "✓ Guardado" : saving ? "Guardando..." : "Guardar"}
         </button>
       </div>
@@ -137,6 +140,7 @@ function WeightSheet({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
 /* ══════════════════════════════════ PAGE ══════════════════════════════════ */
 export default function Dashboard() {
   const router = useRouter();
+  const { accents } = useTheme();
   const [activity, setActivity]     = useState<ActivityRow[]>([]);
   const [heartRate, setHeartRate]   = useState<HeartRateRow[]>([]);
   const [sleep, setSleep]           = useState<SleepRow[]>([]);
@@ -179,7 +183,7 @@ export default function Dashboard() {
         <div className="text-5xl">📡</div>
         <p className="text-sm" style={{ color: "var(--text-muted)" }}>{error}</p>
         <button onClick={loadData} className="px-6 py-2.5 rounded-xl text-sm font-medium text-white"
-          style={{ background: "linear-gradient(135deg,#8B0057,#620040)", boxShadow: "0 0 16px rgba(139,0,87,0.4)" }}>
+          style={{ background: `linear-gradient(135deg,${accents.main},${accents.main}CC)`, boxShadow: "0 0 16px var(--c-glow)" }}>
           Reintentar
         </button>
       </div>
@@ -198,20 +202,23 @@ export default function Dashboard() {
   const stepPct     = today ? Math.min(100, Math.round((today.steps / STEP_GOAL) * 100)) : 0;
   const calPct      = today ? Math.min(100, Math.round((today.calories / CAL_GOAL) * 100)) : 0;
 
-  // sparkline data (last 7)
   const stepSpark   = activity.slice(-7).map(r => r.steps);
   const calSpark    = activity.slice(-7).map(r => r.calories);
   const hrSpark     = heartRate.slice(-7).map(r => r.hr_avg);
 
+  const sScoreColor = sScore !== null
+    ? (sScore >= 80 ? "#00C950" : sScore >= 60 ? accents.hl : accents.hl2)
+    : "var(--text-muted)";
+
   return (
     <AppShell>
-      {showWeight && <WeightSheet onClose={() => setShowWeight(false)} onSaved={loadData} />}
+      {showWeight && <WeightSheet onClose={() => setShowWeight(false)} onSaved={loadData} mainColor={accents.main} />}
 
       <main className="max-w-2xl mx-auto px-4 py-5 space-y-4">
 
         {/* ── HEADER ── */}
         <div className="animate-fade-up">
-          <p className="text-[9px] tracking-[0.3em] font-semibold uppercase" style={{ color: "#8B0057" }}>
+          <p className="text-[9px] tracking-[0.3em] font-semibold uppercase" style={{ color: accents.main }}>
             {new Date().toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" }).toUpperCase()}
           </p>
           <div className="flex items-center justify-between mt-0.5">
@@ -220,13 +227,13 @@ export default function Dashboard() {
             </h1>
             {streak > 0 && (
               <span className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold"
-                style={{ background: "rgba(255,107,53,0.12)", border: "1px solid rgba(255,107,53,0.3)", color: "#FF6B35" }}>
+                style={{ background: `${accents.hl2}1F`, border: `1px solid ${accents.hl2}4D`, color: accents.hl2 }}>
                 🔥 {streak}d
               </span>
             )}
           </div>
           {isStale && today && (
-            <p className="text-[10px] mt-1" style={{ color: "#FF6B35" }}>
+            <p className="text-[10px] mt-1" style={{ color: accents.hl2 }}>
               ⚠️ Último dato: {today.date} — sincroniza para actualizar
             </p>
           )}
@@ -236,7 +243,7 @@ export default function Dashboard() {
         <div className="scan-on-mount rounded-2xl p-5 animate-fade-up" style={{
           background: "var(--surface)",
           border: "1px solid var(--border-glow)",
-          boxShadow: "0 0 30px rgba(139,0,87,0.12), inset 0 1px 0 rgba(139,0,87,0.2)",
+          boxShadow: "0 0 30px var(--c-glow)",
           animationDelay: "50ms",
         }}>
           <div className="flex items-end justify-between mb-3">
@@ -244,13 +251,13 @@ export default function Dashboard() {
               <p className="text-[9px] uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Pasos hoy</p>
               <p className="text-4xl font-black leading-none mt-1" style={{
                 color: "var(--text-primary)",
-                textShadow: "0 0 20px rgba(139,0,87,0.35)",
+                textShadow: "0 0 20px var(--c-glow)",
               }}>
                 {today?.steps?.toLocaleString() ?? "—"}
               </p>
             </div>
             <div className="text-right">
-              <p className="text-2xl font-black" style={{ color: stepPct >= 100 ? "#00C950" : "#8B0057" }}>
+              <p className="text-2xl font-black" style={{ color: stepPct >= 100 ? "#00C950" : accents.main }}>
                 {stepPct}%
               </p>
               <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>meta {STEP_GOAL.toLocaleString()}</p>
@@ -264,8 +271,8 @@ export default function Dashboard() {
                 width: `${stepPct}%`,
                 background: stepPct >= 100
                   ? "linear-gradient(90deg,#00C950,#00FF80)"
-                  : "linear-gradient(90deg,#8B0057,#B5006E,#FF6B35)",
-                boxShadow: "0 0 8px rgba(139,0,87,0.6)",
+                  : `linear-gradient(90deg,${accents.main},${accents.light},${accents.hl2})`,
+                boxShadow: "0 0 8px var(--c-glow)",
               }} />
           </div>
 
@@ -286,11 +293,11 @@ export default function Dashboard() {
         {/* ── STAT TILES ── */}
         <div className="grid grid-cols-3 gap-3">
           <StatTile icon="🔥" label="Calorías" value={today?.calories ? Math.round(today.calories).toLocaleString() : "—"}
-            unit="kcal" color="#FF6B35" spark={calSpark} delay={100} />
+            unit="kcal" color={accents.hl2} spark={calSpark} delay={100} />
           <StatTile icon="❤️" label="Pulso" value={latestHR?.hr_avg ? Math.round(latestHR.hr_avg) : "—"}
-            unit="bpm" color="#B5006E" spark={hrSpark} delay={160} />
+            unit="bpm" color={accents.light} spark={hrSpark} delay={160} />
           <StatTile icon="🌙" label="Sueño" value={lastSleep?.duration_hours ?? "—"}
-            unit="h" color="#FFD600" spark={sleep.slice(-7).map(r => r.duration_hours)} delay={220} />
+            unit="h" color={accents.hl} spark={sleep.slice(-7).map(r => r.duration_hours)} delay={220} />
         </div>
 
         {/* ── SLEEP DETAIL ── */}
@@ -307,9 +314,9 @@ export default function Dashboard() {
               {sScore !== null && (
                 <span className="text-xs font-black px-2 py-0.5 rounded-lg"
                   style={{
-                    background: sScore >= 80 ? "rgba(0,201,80,0.15)" : sScore >= 60 ? "rgba(255,214,0,0.15)" : "rgba(255,107,53,0.15)",
-                    color: sScore >= 80 ? "#00C950" : sScore >= 60 ? "#FFD600" : "#FF6B35",
-                    border: `1px solid ${sScore >= 80 ? "rgba(0,201,80,0.3)" : sScore >= 60 ? "rgba(255,214,0,0.3)" : "rgba(255,107,53,0.3)"}`,
+                    background: sScore >= 80 ? "rgba(0,201,80,0.15)" : sScore >= 60 ? `${accents.hl}26` : `${accents.hl2}26`,
+                    color: sScoreColor,
+                    border: `1px solid ${sScore >= 80 ? "rgba(0,201,80,0.3)" : sScore >= 60 ? `${accents.hl}4D` : `${accents.hl2}4D`}`,
                   }}>
                   Score {sScore}
                 </span>
@@ -319,10 +326,10 @@ export default function Dashboard() {
             {/* Phase bar */}
             <div className="flex h-3 rounded-full overflow-hidden gap-px mb-3">
               {[
-                { min: lastSleep.deep_min,  color: "#8B0057",  label: "Profundo" },
-                { min: lastSleep.rem_min,   color: "#B5006E",  label: "REM" },
-                { min: lastSleep.light_min, color: "#2a2a2a",  label: "Ligero" },
-                { min: lastSleep.awake_min, color: "#1a1a1a",  label: "Despierto" },
+                { min: lastSleep.deep_min,  color: accents.main,          label: "Profundo" },
+                { min: lastSleep.rem_min,   color: accents.light,         label: "REM" },
+                { min: lastSleep.light_min, color: "var(--border-col)",   label: "Ligero" },
+                { min: lastSleep.awake_min, color: "var(--surface-2)",    label: "Despierto" },
               ].map(s => {
                 const total = lastSleep.deep_min + lastSleep.rem_min + lastSleep.light_min + lastSleep.awake_min;
                 const w = total > 0 ? (s.min / total) * 100 : 0;
@@ -335,8 +342,8 @@ export default function Dashboard() {
 
             <div className="flex gap-4 text-xs flex-wrap">
               {[
-                { label: "Profundo", min: lastSleep.deep_min,  color: "#8B0057" },
-                { label: "REM",      min: lastSleep.rem_min,   color: "#B5006E" },
+                { label: "Profundo", min: lastSleep.deep_min,  color: accents.main },
+                { label: "REM",      min: lastSleep.rem_min,   color: accents.light },
                 { label: "Ligero",   min: lastSleep.light_min, color: "var(--text-muted)" },
               ].map(s => (
                 <span key={s.label} className="flex items-center gap-1">
@@ -353,7 +360,7 @@ export default function Dashboard() {
         <div className="rounded-2xl py-5 px-4 animate-fade-up" style={{
           background: "var(--surface)",
           border: "1px solid var(--border-glow)",
-          boxShadow: "0 0 20px rgba(139,0,87,0.08)",
+          boxShadow: "0 0 20px var(--c-glow)",
           animationDelay: "320ms",
         }}>
           <p className="text-[9px] uppercase tracking-widest text-center mb-4" style={{ color: "var(--text-muted)" }}>
@@ -361,17 +368,17 @@ export default function Dashboard() {
           </p>
           <div className="grid grid-cols-4 gap-1">
             <Ring pct={today ? today.steps / STEP_GOAL : 0}
-              color="#8B0057" icon="👟" label="Pasos"
+              color={accents.main} icon="👟" label="Pasos"
               value={today ? `${stepPct}%` : "—"} delay={0} />
             <Ring pct={today ? today.calories / CAL_GOAL : 0}
-              color="#FF6B35" icon="🔥" label="Cal"
+              color={accents.hl2} icon="🔥" label="Cal"
               value={today ? `${calPct}%` : "—"} delay={80} />
             <Ring pct={lastSleep ? lastSleep.duration_hours / SLEEP_GOAL_H : 0}
-              color="#FFD600" icon="🌙" label="Sueño"
+              color={accents.hl} icon="🌙" label="Sueño"
               value={lastSleep ? `${lastSleep.duration_hours}h` : "—"} delay={160} />
             <Ring
               pct={sScore !== null ? sScore / 100 : 0}
-              color={sScore !== null ? (sScore >= 80 ? "#00C950" : sScore >= 60 ? "#FFD600" : "#FF6B35") : "var(--text-muted)"}
+              color={sScoreColor}
               icon="⭐" label="Calidad"
               value={sScore !== null ? `${sScore}` : "—"} delay={240} />
           </div>
@@ -381,7 +388,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-2 gap-3 animate-fade-up" style={{ animationDelay: "360ms" }}>
           <button onClick={() => setShowWeight(true)}
             className="rounded-2xl py-3.5 flex items-center justify-center gap-2 font-semibold text-sm transition-all active:scale-95"
-            style={{ background: "linear-gradient(135deg,#8B0057,#620040)", color: "white", boxShadow: "0 0 14px rgba(139,0,87,0.35)" }}>
+            style={{ background: `linear-gradient(135deg,${accents.main},${accents.main}CC)`, color: "white", boxShadow: "0 0 14px var(--c-glow)" }}>
             <span>⚖️</span> Registrar peso
           </button>
           <a href="/activity"

@@ -5,6 +5,7 @@ import { api, HeartRateRow } from "@/lib/api";
 import AppShell from "@/components/AppShell";
 import { HeartRateChart } from "@/components/Charts";
 import LoadingScreen from "@/components/LoadingScreen";
+import { useTheme } from "@/lib/theme";
 
 function hrZone(avg: number): { zone: string; color: string; desc: string } {
   if (avg < 60) return { zone: "Atlético",  color: "#00C6FF", desc: "FC en reposo muy baja — excelente forma CV" };
@@ -38,6 +39,7 @@ function ZoneBar({ avg }: { avg: number }) {
 
 export default function HeartRatePage() {
   const router = useRouter();
+  const { accents } = useTheme();
   const [data, setData] = useState<HeartRateRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -50,7 +52,7 @@ export default function HeartRatePage() {
   }, [router]);
 
   useEffect(() => { load(); }, [load]);
-  if (loading) return <LoadingScreen color="#B5006E" />;
+  if (loading) return <LoadingScreen color={accents.light} />;
 
   const last    = data[data.length - 1];
   const avgOf   = (k: keyof HeartRateRow) =>
@@ -72,7 +74,7 @@ export default function HeartRatePage() {
 
         {/* header */}
         <div className="animate-fade-up">
-          <p className="text-[9px] tracking-[0.3em] font-semibold uppercase" style={{ color: "#B5006E" }}>Pulso cardíaco</p>
+          <p className="text-[9px] tracking-[0.3em] font-semibold uppercase" style={{ color: accents.light }}>Pulso cardíaco</p>
           <div className="flex items-center justify-between mt-0.5">
             <h1 className="text-xl font-black" style={{ color: "var(--text-primary)" }}>Frecuencia cardíaca</h1>
             <span className="text-xs" style={{ color: "var(--text-muted)" }}>{data.length} días</span>
@@ -87,7 +89,7 @@ export default function HeartRatePage() {
 
             <div className="flex items-end justify-between mb-4">
               <div>
-                <p className="text-4xl font-black" style={{ color: "#B5006E", textShadow: "0 0 20px rgba(181,0,110,0.3)" }}>
+                <p className="text-4xl font-black" style={{ color: accents.light, textShadow: `0 0 20px var(--c-glow)` }}>
                   {Math.round(last.hr_avg)}
                   <span className="text-lg font-normal ml-1" style={{ color: "var(--text-muted)" }}>bpm</span>
                 </p>
@@ -109,9 +111,9 @@ export default function HeartRatePage() {
         {/* stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            { label: "FC media avg",  value: `${avgOf("hr_avg")} bpm`, color: "#B5006E", delay: 100 },
+            { label: "FC media avg",  value: `${avgOf("hr_avg")} bpm`, color: accents.light, delay: 100 },
             { label: "FC máx avg",    value: `${avgOf("hr_max")} bpm`, color: "#FF3B30", delay: 140 },
-            { label: "FC mín avg",    value: `${avgOf("hr_min")} bpm`, color: "#FFD600", delay: 180 },
+            { label: "FC mín avg",    value: `${avgOf("hr_min")} bpm`, color: accents.hl, delay: 180 },
             { label: "Rango total",   value: `${maxAll - minAll} bpm`, color: "var(--text-muted)", delay: 220 },
           ].map(s => (
             <div key={s.label} className="rounded-2xl p-4 animate-fade-up"
@@ -170,9 +172,9 @@ export default function HeartRatePage() {
                   return (
                     <tr key={r.date} className="row-hover transition-colors" style={{ borderBottom: "1px solid var(--border-col)" }}>
                       <td className="px-4 py-2.5 text-xs" style={{ color: "var(--text-muted)" }}>{r.date}</td>
-                      <td className="px-4 py-2.5 font-semibold text-[#B5006E]">{Math.round(r.hr_avg)} bpm</td>
-                      <td className="px-4 py-2.5 text-xs text-[#FF3B30]">{r.hr_max} bpm</td>
-                      <td className="px-4 py-2.5 text-xs text-[#FFD600]">{r.hr_min} bpm</td>
+                      <td className="px-4 py-2.5 font-semibold" style={{ color: accents.light }}>{Math.round(r.hr_avg)} bpm</td>
+                      <td className="px-4 py-2.5 text-xs" style={{ color: "#FF3B30" }}>{r.hr_max} bpm</td>
+                      <td className="px-4 py-2.5 text-xs" style={{ color: accents.hl }}>{r.hr_min} bpm</td>
                       <td className="px-4 py-2.5 text-xs font-medium" style={{ color: z.color }}>{z.zone}</td>
                     </tr>
                   );

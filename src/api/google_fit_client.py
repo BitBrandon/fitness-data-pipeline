@@ -23,6 +23,14 @@ SCOPES = [
 TOKEN_FILE = "token_google_fit.json"
 HEALTH_API = "https://health.googleapis.com/v4"
 
+# Sanity bounds — values outside these are data errors
+_MAX_HR_BPM    = 250    # no human heart beats above this
+_MIN_HR_BPM    = 20     # below this is a sensor error
+_MAX_KCAL_DAY  = 8_000  # no normal day exceeds this
+_MIN_KCAL_DAY  = 100    # below this the API probably returned 0 or a fragment
+_MAX_SLEEP_H   = 20     # sleeping more than this is an error
+_MIN_SLEEP_MIN = 30     # ignore fragments under 30 min
+
 
 def _client_config():
     return {
@@ -62,14 +70,12 @@ def _civil_dt(dt):
     }
 
 
-def _daily_rollup(creds, data_type, days):
-    now   = datetime.now(timezone.utc)
-    start = now - timedelta(days=days)
-    # end must be tomorrow so today's partial day is included in the rollup
-    end   = now + timedelta(days=1)
+_MAX_DAYS_PER_REQUEST = 60  # Google Health API returns 400 for ranges > ~60 days
 
-    body = {"range": {"start": _civil_dt(start), "end": _civil_dt(end)}}
 
+def _daily_rollup_single(creds, data_type, start_dt, end_dt) -> list:
+    """Single ranged POST to dailyRollUp."""
+    body = {"range": {"start": _civil_dt(start_dt), "end": _civil_dt(end_dt)}}
     resp = requests.post(
         f"{HEALTH_API}/users/me/dataTypes/{data_type}/dataPoints:dailyRollUp",
         headers={"Authorization": f"Bearer {creds.token}"},
@@ -77,10 +83,32 @@ def _daily_rollup(creds, data_type, days):
         timeout=30,
     )
     resp.raise_for_status()
-    points = resp.json().get("rollupDataPoints", [])
-    logger.debug("[%s] %d rollup points. First: %s", data_type, len(points),
-                 list(points[0].keys()) if points else "empty")
-    return points
+    return resp.json().get("rollupDataPoints", [])
+
+
+def _daily_rollup(creds, data_type, days) -> list:
+    """Fetch daily rollup, chunking into ≤60-day windows to stay within API limits."""
+    now    = datetime.now(timezone.utc)
+    end_dt = now + timedelta(days=1)
+    all_points: list = []
+
+    # Walk backwards in 60-day chunks
+    remaining = days
+    chunk_end = end_dt
+    while remaining > 0:
+        chunk_days  = min(remaining, _MAX_DAYS_PER_REQUEST)
+        chunk_start = chunk_end - timedelta(days=chunk_days)
+        pts = _daily_rollup_single(creds, data_type, chunk_start, chunk_end)
+        logger.info("[google-health] %s chunk %d days → %d points", data_type, chunk_days, len(pts))
+        all_points.extend(pts)
+        chunk_end  = chunk_start
+        remaining -= chunk_days
+
+    # Deduplicate by date (keep last occurrence)
+    by_date: dict[str, dict] = {_point_date(p): p for p in all_points}
+    result = [by_date[d] for d in sorted(by_date)]
+    logger.info("[google-health] %s total → %d unique days", data_type, len(result))
+    return result
 
 
 def _point_date(point):
@@ -91,8 +119,7 @@ def _point_date(point):
 def _extract_numeric(point, *candidate_paths):
     """
     Try each (field, subfield) pair in order and return the first non-zero float found.
-    candidate_paths: list of (field_name, subfield_name) tuples.
-    Logs a warning if all candidates miss.
+    Logs the full point when all candidates miss so we can diagnose field-name changes.
     """
     for field, subfield in candidate_paths:
         container = point.get(field, {})
@@ -100,14 +127,15 @@ def _extract_numeric(point, *candidate_paths):
         if val:
             return float(val)
 
-    logger.warning("_extract_numeric: all candidates missed. Point keys=%s, tried=%s",
-                   list(point.keys()), candidate_paths)
+    logger.warning("_extract_numeric: all candidates missed. Full point=%s | tried=%s",
+                   point, candidate_paths)
     return 0.0
 
 
+# Active-energy-burned is more reliable than total-calories for per-day rollup
 _CALORIES_SLUGS = (
-    "total-calories",       # total (active + BMR) — matches Fitbit app display
-    "active-energy-burned", # active only — fallback
+    "active-energy-burned",  # active calories only — reliable per-day rollup
+    "total-calories",        # BMR + active — often returns period totals, not per-day
 )
 
 
@@ -117,7 +145,7 @@ def _fetch_calories(creds, days):
         try:
             pts = _daily_rollup(creds, slug, days)
             if pts:
-                logger.info("calories fetched via slug '%s'", slug)
+                logger.info("calories fetched via slug '%s' (%d points)", slug, len(pts))
                 return slug, {_point_date(p): p for p in pts}
         except requests.HTTPError as e:
             logger.debug("calories slug '%s' failed: %s", slug, e)
@@ -126,10 +154,7 @@ def _fetch_calories(creds, days):
 
 
 def _sum_active_minutes(point):
-    """
-    activeMinutes.activeMinutesRollupByActivityLevel is a list of
-    {activityLevel, activeMinutesSum}. Sum MODERATE + VIGOROUS only.
-    """
+    """Sum MODERATE + VIGOROUS active minutes from rollup."""
     levels = (
         point.get("activeMinutes", {})
              .get("activeMinutesRollupByActivityLevel", [])
@@ -146,7 +171,7 @@ def fetch_daily_activity(days=30):
     creds = get_credentials()
 
     steps_points  = {_point_date(p): p for p in _daily_rollup(creds, "steps", days)}
-    _, cal_points = _fetch_calories(creds, days)
+    slug, cal_points = _fetch_calories(creds, days)
 
     active_points: dict = {}
     try:
@@ -159,19 +184,26 @@ def fetch_daily_activity(days=30):
     rows = []
 
     for date in all_dates:
-        # steps.countSum is returned as a string by the API
         steps = int(steps_points[date].get("steps", {}).get("countSum", 0)) if date in steps_points else 0
 
-        # calories — field name depends on the slug that worked
         calories = 0.0
         if date in cal_points:
             p = cal_points[date]
-            calories = round(_extract_numeric(p,
-                ("totalCalories",    "kcalSum"),   # total-calories slug
-                ("activeEnergyBurned", "kcalSum"), # active-energy-burned slug
-            ), 1)
+            raw_cal = _extract_numeric(p,
+                ("activeEnergyBurned", "kcalSum"),  # active-energy-burned slug
+                ("totalCalories",      "kcalSum"),  # total-calories slug
+            )
+            # Sanity check: per-day calories outside normal range → skip
+            if raw_cal > _MAX_KCAL_DAY:
+                logger.warning("[activity] date=%s calories=%.0f exceeds max %d — "
+                               "possible period total in kcalSum, raw point=%s",
+                               date, raw_cal, _MAX_KCAL_DAY, p)
+                raw_cal = 0.0
+            elif raw_cal < _MIN_KCAL_DAY and raw_cal > 0:
+                logger.debug("[activity] date=%s calories=%.0f below min %d — keeping",
+                             date, raw_cal, _MIN_KCAL_DAY)
+            calories = round(raw_cal, 1)
 
-        # active minutes: sum MODERATE + VIGOROUS levels
         active_minutes = _sum_active_minutes(active_points[date]) if date in active_points else 0
 
         if steps == 0 and calories == 0.0:
@@ -184,42 +216,65 @@ def fetch_daily_activity(days=30):
             "active_minutes": active_minutes,
         })
 
+    logger.info("[activity] returning %d rows for %d days", len(rows), days)
     return rows
+
+
+# Known Google Health API slugs for heart rate — try in order
+_HR_SLUGS = ("heart-rate", "heart_rate", "heartRate")
+
+
+def _fetch_hr_points(creds, days) -> list:
+    """Try known heart-rate slugs; return points or [] if none work. Never raises."""
+    for slug in _HR_SLUGS:
+        try:
+            pts = _daily_rollup(creds, slug, days)
+            logger.info("[heart-rate] slug '%s' → %d points", slug, len(pts))
+            return pts
+        except Exception as e:
+            logger.warning("[heart-rate] slug '%s' failed: %s", slug, e)
+            continue
+    logger.warning("[heart-rate] all slugs failed — skipping HR sync (no wearable data or unsupported type)")
+    return []
 
 
 def fetch_heart_rate(days=30):
     """Return list of dicts with date, hr_avg, hr_max, hr_min."""
     creds = get_credentials()
-    now = datetime.now(timezone.utc)
-    chunk_size = 14
-    all_points = []
+    all_points = _fetch_hr_points(creds, days)
+    if not all_points:
+        return []
 
-    for offset in range(0, days, chunk_size):
-        chunk_end   = now + timedelta(days=1) if offset == 0 else now - timedelta(days=offset)
-        chunk_start = now - timedelta(days=min(offset + chunk_size, days))
-        body = {"range": {"start": _civil_dt(chunk_start), "end": _civil_dt(chunk_end)}}
-        resp = requests.post(
-            f"{HEALTH_API}/users/me/dataTypes/heart-rate/dataPoints:dailyRollUp",
-            headers={"Authorization": f"Bearer {creds.token}"},
-            json=body,
-            timeout=30,
-        )
-        resp.raise_for_status()
-        all_points.extend(resp.json().get("rollupDataPoints", []))
+    # Deduplicate by date — keep the most recent occurrence (last in list)
+    by_date: dict[str, dict] = {}
+    for point in all_points:
+        by_date[_point_date(point)] = point
 
     rows = []
-    for point in all_points:
+    for date, point in sorted(by_date.items()):
         hr = point.get("heartRate", {})
         avg = hr.get("beatsPerMinuteAvg", 0)
         if not avg:
+            logger.debug("[heart-rate] date=%s no beatsPerMinuteAvg in heartRate=%s", date, hr)
+            # Log full point so we can see what fields ARE present
+            logger.info("[heart-rate] full point for %s: %s", date, point)
             continue
+
+        avg_f = float(avg)
+        if avg_f > _MAX_HR_BPM or avg_f < _MIN_HR_BPM:
+            logger.warning("[heart-rate] date=%s hr_avg=%.1f outside bounds [%d,%d] — "
+                           "skipping. Full point=%s",
+                           date, avg_f, _MIN_HR_BPM, _MAX_HR_BPM, point)
+            continue
+
         rows.append({
-            "date":   _point_date(point),
-            "hr_avg": round(float(avg), 1),
-            "hr_max": round(float(hr.get("beatsPerMinuteMax", 0)), 1),
-            "hr_min": round(float(hr.get("beatsPerMinuteMin", 0)), 1),
+            "date":   date,
+            "hr_avg": round(avg_f, 1),
+            "hr_max": round(float(hr.get("beatsPerMinuteMax", avg_f)), 1),
+            "hr_min": round(float(hr.get("beatsPerMinuteMin", avg_f)), 1),
         })
 
+    logger.info("[heart-rate] returning %d valid rows (skipped out-of-bounds)", len(rows))
     return rows
 
 
@@ -233,12 +288,17 @@ def fetch_sleep(days=30):
         timeout=30,
     )
     resp.raise_for_status()
+    raw = resp.json()
+    data_points = raw.get("dataPoints", [])
+    logger.info("[sleep] raw response has %d dataPoints", len(data_points))
+    if data_points:
+        logger.info("[sleep] first dataPoint keys=%s | value=%s", list(data_points[0].keys()), data_points[0])
 
     now    = datetime.now(timezone.utc)
     cutoff = now - timedelta(days=days)
-    rows   = []
+    rows_by_date: dict[str, dict] = {}
 
-    for point in resp.json().get("dataPoints", []):
+    for point in data_points:
         sleep    = point.get("sleep", {})
         interval = sleep.get("interval", {})
         start_str = interval.get("startTime", "")
@@ -250,20 +310,28 @@ def fetch_sleep(days=30):
         if start_dt < cutoff:
             continue
 
-        # Prefer pre-computed summary (already validated by the API)
         summary_stages = {
             s["type"]: int(s.get("minutes", 0))
             for s in sleep.get("summary", {}).get("stagesSummary", [])
         }
 
         if summary_stages:
-            total_min = int(sleep.get("summary", {}).get("minutesInSleepPeriod", 0))
-            deep_min  = summary_stages.get("DEEP", 0)
-            light_min = summary_stages.get("LIGHT", 0)
-            rem_min   = summary_stages.get("REM", 0)
-            awake_min = summary_stages.get("AWAKE", 0)
+            raw_period = int(sleep.get("summary", {}).get("minutesInSleepPeriod", 0))
+            # Fitbit via Google Health returns this field in SECONDS despite the name
+            if raw_period > 24 * 60:  # > 1440 can't be valid minutes → must be seconds
+                total_min = raw_period // 60
+                logger.debug("[sleep] minutesInSleepPeriod=%d detected as seconds → %d min", raw_period, total_min)
+            else:
+                total_min = raw_period
+
+            def _stage_min(v: int) -> int:
+                return v // 60 if v > 1440 else v
+
+            deep_min  = _stage_min(summary_stages.get("DEEP", 0))
+            light_min = _stage_min(summary_stages.get("LIGHT", 0))
+            rem_min   = _stage_min(summary_stages.get("REM", 0))
+            awake_min = _stage_min(summary_stages.get("AWAKE", 0))
         else:
-            # Fallback: compute from raw stages
             end_str = interval.get("endTime", "")
             if not end_str:
                 continue
@@ -281,16 +349,34 @@ def fetch_sleep(days=30):
             rem_min   = round(stage_totals["REM"])
             awake_min = round(stage_totals["AWAKE"])
 
-        if total_min < 30:
+        if total_min < _MIN_SLEEP_MIN:
+            logger.debug("[sleep] skipping fragment total_min=%d < %d", total_min, _MIN_SLEEP_MIN)
             continue
 
-        rows.append({
-            "date":           start_dt.strftime("%Y-%m-%d"),
-            "duration_hours": round(total_min / 60, 2),
-            "deep_min":       deep_min,
-            "light_min":      light_min,
-            "rem_min":        rem_min,
-            "awake_min":      awake_min,
-        })
+        duration_h = round(total_min / 60, 2)
+        if duration_h > _MAX_SLEEP_H:
+            logger.warning("[sleep] date=%s duration=%.1fh exceeds max %d — skipping. point=%s",
+                           start_dt.date(), duration_h, _MAX_SLEEP_H, point)
+            continue
 
+        date_str = start_dt.strftime("%Y-%m-%d")
+        # Keep the longest sleep session per day
+        existing = rows_by_date.get(date_str)
+        if existing is None or total_min > existing["_total_min"]:
+            rows_by_date[date_str] = {
+                "date":           date_str,
+                "duration_hours": duration_h,
+                "deep_min":       deep_min,
+                "light_min":      light_min,
+                "rem_min":        rem_min,
+                "awake_min":      awake_min,
+                "_total_min":     total_min,
+            }
+
+    rows = []
+    for row in sorted(rows_by_date.values(), key=lambda r: r["date"]):
+        row.pop("_total_min", None)
+        rows.append(row)
+
+    logger.info("[sleep] returning %d valid sessions", len(rows))
     return rows

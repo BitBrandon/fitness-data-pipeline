@@ -21,6 +21,15 @@
   --chart-tick:   #6B6B6B;
   --tooltip-bg:   #1C1C1C;
   --tooltip-text: #F5F5F5;
+  /* brand accents */
+  --c-main:       #8B0057;
+  --c-light:      #B5006E;
+  --c-hl:         #FFD600;
+  --c-hl2:        #FF6B35;
+  --c-scan:       rgba(139,0,87,0.12);
+  --c-glow:       rgba(139,0,87,0.25);
+  --c-active-bg:  rgba(139,0,87,0.12);
+  --c-active-brd: rgba(139,0,87,0.35);
 }
 
 /* Light theme */
@@ -37,6 +46,40 @@
   --chart-tick:   #9CA3AF;
   --tooltip-bg:   #FFFFFF;
   --tooltip-text: #111827;
+  /* brand accents */
+  --c-main:       #8B0057;
+  --c-light:      #B5006E;
+  --c-hl:         #FFD600;
+  --c-hl2:        #FF6B35;
+  --c-scan:       rgba(139,0,87,0.12);
+  --c-glow:       rgba(139,0,87,0.2);
+  --c-active-bg:  rgba(139,0,87,0.10);
+  --c-active-brd: rgba(139,0,87,0.30);
+}
+
+/* Sakura theme — all pinks */
+[data-theme="sakura"] {
+  --bg:           #FDF4F7;
+  --bg-nav:       #F9ECF3;
+  --surface:      #FFFFFF;
+  --surface-2:    #FCEAF3;
+  --border-col:   #F0C4DA;
+  --border-glow:  #F09EC8;
+  --text-primary: #1E0D16;
+  --text-muted:   #9B6080;
+  --chart-grid:   #F5D5E8;
+  --chart-tick:   #C090A8;
+  --tooltip-bg:   #FFF0F6;
+  --tooltip-text: #1E0D16;
+  /* brand accents — all pink shades */
+  --c-main:       #C2185B;
+  --c-light:      #E91E8C;
+  --c-hl:         #FF80AB;
+  --c-hl2:        #FF4FA0;
+  --c-scan:       rgba(194,24,91,0.10);
+  --c-glow:       rgba(194,24,91,0.22);
+  --c-active-bg:  rgba(194,24,91,0.10);
+  --c-active-brd: rgba(194,24,91,0.32);
 }
 
 body {
@@ -50,7 +93,7 @@ body {
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: var(--surface); }
 ::-webkit-scrollbar-thumb { background: var(--border-col); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #8B0057; }
+::-webkit-scrollbar-thumb:hover { background: var(--c-main); }
 
 /* Themed row hover for tables */
 @utility row-hover {
@@ -72,7 +115,7 @@ body {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(139,0,87,0.12) 50%, transparent);
+  background: linear-gradient(90deg, transparent, var(--c-scan) 50%, transparent);
   animation: scan-sweep 1s ease-out forwards;
   pointer-events: none;
 }
@@ -89,8 +132,8 @@ body {
 
 /* Pulsing glow for bot avatar */
 @keyframes glow-pulse {
-  0%, 100% { box-shadow: 0 0 8px rgba(139,0,87,0.5); }
-  50%       { box-shadow: 0 0 20px rgba(139,0,87,0.9), 0 0 40px rgba(139,0,87,0.4); }
+  0%, 100% { box-shadow: 0 0 8px var(--c-glow); }
+  50%       { box-shadow: 0 0 20px var(--c-main), 0 0 40px var(--c-glow); }
 }
 
 .pulse-glow { animation: glow-pulse 2s ease-in-out infinite; }

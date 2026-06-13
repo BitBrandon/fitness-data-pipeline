@@ -7,8 +7,8 @@ from oauth2client.service_account import ServiceAccountCredentials
 logger = logging.getLogger(__name__)
 
 _RETRY_STATUSES = {429, 500, 502, 503, 504}
-_MAX_RETRIES = 4
-_BASE_DELAY  = 2.0  # seconds
+_MAX_RETRIES = 7
+_BASE_DELAY  = 3.0  # seconds
 
 
 def _with_retry(fn, *args, **kwargs):
@@ -20,7 +20,7 @@ def _with_retry(fn, *args, **kwargs):
             code = e.response.status_code if hasattr(e, "response") else 0
             if code not in _RETRY_STATUSES or attempt == _MAX_RETRIES - 1:
                 raise
-            delay = _BASE_DELAY * (2 ** attempt)
+            delay = min(_BASE_DELAY * (2 ** attempt), 60.0)  # cap at 60s
             logger.warning("Google Sheets API %s — reintentando en %.0fs (intento %d/%d)",
                            code, delay, attempt + 1, _MAX_RETRIES)
             time.sleep(delay)

@@ -45,7 +45,6 @@ export default function SyncModal({ open, onClose, onDone }: Props) {
       return;
     }
 
-    // Poll status every 1.5s
     pollRef.current = setInterval(async () => {
       try {
         const s = await api.syncStatus();
@@ -76,13 +75,13 @@ export default function SyncModal({ open, onClose, onDone }: Props) {
         style={{
           background: "var(--surface)",
           border: "1px solid var(--border-col)",
-          boxShadow: "0 -8px 40px rgba(0,0,0,0.5), 0 0 20px rgba(139,0,87,0.1)",
+          boxShadow: "0 -8px 40px rgba(0,0,0,0.5), 0 0 20px var(--c-glow)",
         }}
         onClick={e => e.stopPropagation()}
       >
         {/* LED strip */}
         <div className="absolute top-0 left-8 right-8 h-px rounded-full"
-          style={{ background: "linear-gradient(90deg,transparent,#8B0057 50%,transparent)" }} />
+          style={{ background: "linear-gradient(90deg,transparent,var(--c-main) 50%,transparent)" }} />
 
         {/* Handle */}
         <div className="w-10 h-1 rounded-full mx-auto" style={{ background: "var(--border-col)" }} />
@@ -105,10 +104,10 @@ export default function SyncModal({ open, onClose, onDone }: Props) {
                   onClick={() => setDays(d)}
                   className="px-3 py-1.5 rounded-xl text-sm font-semibold transition-all"
                   style={{
-                    background: days === d ? "#8B0057" : "var(--surface-2)",
-                    border: `1px solid ${days === d ? "#B5006E" : "var(--border-col)"}`,
+                    background: days === d ? "var(--c-main)" : "var(--surface-2)",
+                    border: `1px solid ${days === d ? "var(--c-light)" : "var(--border-col)"}`,
                     color: days === d ? "white" : "var(--text-muted)",
-                    boxShadow: days === d ? "0 0 10px rgba(139,0,87,0.4)" : "none",
+                    boxShadow: days === d ? "0 0 10px var(--c-glow)" : "none",
                   }}>
                   {d}d
                 </button>
@@ -123,7 +122,7 @@ export default function SyncModal({ open, onClose, onDone }: Props) {
               </button>
               <button onClick={startSync}
                 className="py-3 rounded-2xl text-sm font-bold text-white"
-                style={{ background: "linear-gradient(135deg,#8B0057,#620040)", boxShadow: "0 0 16px rgba(139,0,87,0.4)" }}>
+                style={{ background: "linear-gradient(135deg,var(--c-main),var(--c-light))", boxShadow: "0 0 16px var(--c-glow)" }}>
                 Sincronizar
               </button>
             </div>
@@ -142,15 +141,15 @@ export default function SyncModal({ open, onClose, onDone }: Props) {
             <div className="space-y-1.5">
               <div className="flex justify-between text-xs" style={{ color: "var(--text-muted)" }}>
                 <span>Progreso</span>
-                <span className="font-bold" style={{ color: "#8B0057" }}>{pct}%</span>
+                <span className="font-bold" style={{ color: "var(--c-main)" }}>{pct}%</span>
               </div>
               <div className="h-2.5 rounded-full overflow-hidden" style={{ background: "var(--surface-2)" }}>
                 <div
                   className="h-full rounded-full transition-all duration-700"
                   style={{
                     width: `${pct}%`,
-                    background: "linear-gradient(90deg, #8B0057, #B5006E, #FFD600)",
-                    boxShadow: "0 0 8px rgba(139,0,87,0.6)",
+                    background: "linear-gradient(90deg, var(--c-main), var(--c-light), var(--c-hl))",
+                    boxShadow: "0 0 8px var(--c-glow)",
                   }}
                 />
               </div>
@@ -159,24 +158,24 @@ export default function SyncModal({ open, onClose, onDone }: Props) {
             {/* Steps list */}
             <div className="space-y-1.5">
               {[
-                { label: "Actividad",          threshold: 20 },
+                { label: "Actividad",           threshold: 20 },
                 { label: "Frecuencia cardíaca", threshold: 40 },
-                { label: "Sueño",              threshold: 60 },
-                { label: "Entrenos (Hevy)",    threshold: 85 },
+                { label: "Sueño",               threshold: 60 },
+                { label: "Entrenos (Hevy)",     threshold: 85 },
               ].map(s => {
-                const done    = pct >= s.threshold;
-                const active  = pct >= s.threshold - 20 && pct < s.threshold;
+                const done   = pct >= s.threshold;
+                const active = pct >= s.threshold - 20 && pct < s.threshold;
                 return (
                   <div key={s.label} className="flex items-center gap-2.5 px-1">
                     <div className="w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center text-[10px]"
                       style={{
-                        background: done ? "#8B0057" : active ? "rgba(139,0,87,0.2)" : "var(--surface-2)",
-                        border: `1px solid ${done ? "#B5006E" : active ? "rgba(139,0,87,0.5)" : "var(--border-col)"}`,
+                        background: done ? "var(--c-main)" : active ? "var(--c-active-bg)" : "var(--surface-2)",
+                        border: `1px solid ${done ? "var(--c-light)" : active ? "var(--c-active-brd)" : "var(--border-col)"}`,
                         transition: "all 0.4s ease",
                       }}>
                       {done ? "✓" : active ? "·" : ""}
                     </div>
-                    <span className="text-xs" style={{ color: done ? "var(--text-primary)" : active ? "#8B0057" : "var(--text-muted)" }}>
+                    <span className="text-xs" style={{ color: done ? "var(--text-primary)" : active ? "var(--c-main)" : "var(--text-muted)" }}>
                       {s.label}
                     </span>
                   </div>
@@ -203,7 +202,7 @@ export default function SyncModal({ open, onClose, onDone }: Props) {
             <p className="text-xs" style={{ color: "var(--text-muted)" }}>{errMsg}</p>
             <button onClick={onClose}
               className="px-6 py-2.5 rounded-2xl text-sm font-semibold text-white"
-              style={{ background: "linear-gradient(135deg,#8B0057,#620040)" }}>
+              style={{ background: "linear-gradient(135deg,var(--c-main),var(--c-light))" }}>
               Cerrar
             </button>
           </div>

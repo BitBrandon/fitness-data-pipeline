@@ -5,6 +5,7 @@ import { api, WorkoutRow, WeeklyRow, PrRow, ExSummaryRow } from "@/lib/api";
 import AppShell from "@/components/AppShell";
 import { VolumeChart, ExerciseProgressChart } from "@/components/Charts";
 import LoadingScreen from "@/components/LoadingScreen";
+import { useTheme } from "@/lib/theme";
 
 // ── date helpers ──────────────────────────────────────────────────────────────
 const MONTHS: Record<string, number> = {
@@ -76,12 +77,10 @@ function buildProgression(rows: WorkoutRow[], exercise: string) {
 // ── tab types ─────────────────────────────────────────────────────────────────
 type Tab = "records" | "sesiones" | "progresion";
 
-// ── medal colors ─────────────────────────────────────────────────────────────
-const MEDAL = ["#FFD600", "#C0C0C0", "#CD7F32"];
-
 // ══════════════════════════════════════════════════════════════════════════════
 export default function WorkoutsPage() {
   const router = useRouter();
+  const { accents } = useTheme();
   const [workouts,  setWorkouts]  = useState<WorkoutRow[]>([]);
   const [weekly,    setWeekly]    = useState<WeeklyRow[]>([]);
   const [prs,       setPrs]       = useState<PrRow[]>([]);
@@ -90,6 +89,9 @@ export default function WorkoutsPage() {
   const [tab,       setTab]       = useState<Tab>("records");
   const [expanded,  setExpanded]  = useState<Set<string>>(new Set());
   const [selExercise, setSelExercise] = useState<string>("");
+
+  // Gold medal uses theme accent; silver/bronze stay as fixed metal colors
+  const MEDAL = [accents.hl, "#C0C0C0", "#CD7F32"];
 
   const load = useCallback(async () => {
     try {
@@ -118,7 +120,7 @@ export default function WorkoutsPage() {
     [workouts, selExercise]
   );
 
-  if (loading) return <LoadingScreen color="#FFD600" />;
+  if (loading) return <LoadingScreen color={accents.hl} />;
 
   const totalVolume  = workouts.reduce((s, w) => s + w.volume, 0);
   const totalSets    = workouts.length;
@@ -129,9 +131,9 @@ export default function WorkoutsPage() {
     setExpanded(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   const TABS: { key: Tab; label: string }[] = [
-    { key: "records",   label: "Records" },
-    { key: "sesiones",  label: "Sesiones" },
-    { key: "progresion",label: "Progresión" },
+    { key: "records",    label: "Records" },
+    { key: "sesiones",   label: "Sesiones" },
+    { key: "progresion", label: "Progresión" },
   ];
 
   return (
@@ -140,7 +142,7 @@ export default function WorkoutsPage() {
 
         {/* header */}
         <div className="animate-fade-up">
-          <p className="text-[9px] tracking-[0.3em] font-semibold uppercase" style={{ color: "#FFD600" }}>Hevy</p>
+          <p className="text-[9px] tracking-[0.3em] font-semibold uppercase" style={{ color: accents.hl }}>Hevy</p>
           <div className="flex items-center justify-between mt-0.5">
             <h1 className="text-xl font-black" style={{ color: "var(--text-primary)" }}>Entrenamientos</h1>
             <span className="text-xs" style={{ color: "var(--text-muted)" }}>{totalSess} sesiones</span>
@@ -150,10 +152,10 @@ export default function WorkoutsPage() {
         {/* stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            { label: "Sesiones",     value: totalSess,                               color: "#FFD600", delay: 50  },
-            { label: "Ejercicios",   value: totalEx,                                 color: "#8B0057", delay: 100 },
-            { label: "Series",       value: totalSets.toLocaleString(),              color: "#B5006E", delay: 150 },
-            { label: "Volumen total",value: `${Math.round(totalVolume/1000)}k kg`,   color: "#FF6B35", delay: 200 },
+            { label: "Sesiones",     value: totalSess,                               color: accents.hl,    delay: 50  },
+            { label: "Ejercicios",   value: totalEx,                                 color: accents.main,  delay: 100 },
+            { label: "Series",       value: totalSets.toLocaleString(),              color: accents.light, delay: 150 },
+            { label: "Volumen total",value: `${Math.round(totalVolume/1000)}k kg`,   color: accents.hl2,   delay: 200 },
           ].map(s => (
             <div key={s.label} className="scan-on-mount rounded-2xl p-4 animate-fade-up"
               style={{ background: "var(--surface)", border: "1px solid var(--border-col)", animationDelay: `${s.delay}ms` }}>
@@ -177,7 +179,7 @@ export default function WorkoutsPage() {
               <button key={t.key} onClick={() => setTab(t.key)}
                 className="px-4 py-2 rounded-xl text-xs font-bold transition-all"
                 style={tab === t.key
-                  ? { background: "linear-gradient(135deg,#8B0057,#620040)", color: "#fff", boxShadow: "0 0 12px rgba(139,0,87,0.4)" }
+                  ? { background: `linear-gradient(135deg,${accents.main},${accents.main}CC)`, color: "#fff", boxShadow: "0 0 12px var(--c-glow)" }
                   : { background: "var(--surface)", color: "var(--text-muted)", border: "1px solid var(--border-col)" }
                 }>
                 {t.label}
@@ -243,7 +245,7 @@ export default function WorkoutsPage() {
                         </p>
                       </div>
                       <div className="text-right ml-4 flex-shrink-0">
-                        <p className="text-sm font-black text-[#FFD600]">{Math.round(sess.totalVolume / 1000)}k <span className="text-[10px] font-normal" style={{ color: "var(--text-muted)" }}>kg</span></p>
+                        <p className="text-sm font-black" style={{ color: accents.hl }}>{Math.round(sess.totalVolume / 1000)}k <span className="text-[10px] font-normal" style={{ color: "var(--text-muted)" }}>kg</span></p>
                         <p className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>{open ? "▲" : "▼"}</p>
                       </div>
                     </button>
@@ -258,7 +260,7 @@ export default function WorkoutsPage() {
                               <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>{ex.sets} series</p>
                             </div>
                             <div className="text-right">
-                              <p className="text-sm font-bold text-[#FFD600]">{ex.maxWeight} kg</p>
+                              <p className="text-sm font-bold" style={{ color: accents.hl }}>{ex.maxWeight} kg</p>
                               <p className="text-[9px]" style={{ color: "var(--text-muted)" }}>{Math.round(ex.totalVolume)} kg vol</p>
                             </div>
                           </div>
@@ -282,7 +284,7 @@ export default function WorkoutsPage() {
                     <button key={ex} onClick={() => setSelExercise(ex)}
                       className="text-xs px-3 py-1.5 rounded-xl transition-all font-medium"
                       style={selExercise === ex
-                        ? { background: "#8B0057", color: "#fff", boxShadow: "0 0 8px rgba(139,0,87,0.4)" }
+                        ? { background: accents.main, color: "#fff", boxShadow: "0 0 8px var(--c-glow)" }
                         : { background: "var(--surface)", color: "var(--text-muted)", border: "1px solid var(--border-col)" }
                       }>
                       {ex}
@@ -307,9 +309,9 @@ export default function WorkoutsPage() {
                     return (
                       <div className="grid grid-cols-3 gap-3">
                         {[
-                          { label: "PR actual",   value: `${pr?.pr_weight ?? last?.maxWeight ?? 0} kg`, color: "#FFD600" },
-                          { label: "Series total", value: ex?.total_sets.toLocaleString() ?? "—",       color: "#8B0057" },
-                          { label: "Progreso",    value: `${gain >= 0 ? "+" : ""}${gain}%`,             color: gain >= 0 ? "#00C950" : "#FF6B35" },
+                          { label: "PR actual",    value: `${pr?.pr_weight ?? last?.maxWeight ?? 0} kg`, color: accents.hl },
+                          { label: "Series total", value: ex?.total_sets.toLocaleString() ?? "—",        color: accents.main },
+                          { label: "Progreso",     value: `${gain >= 0 ? "+" : ""}${gain}%`,             color: gain >= 0 ? "#00C950" : accents.hl2 },
                         ].map(s => (
                           <div key={s.label} className="rounded-2xl p-3"
                             style={{ background: "var(--surface)", border: "1px solid var(--border-col)" }}>

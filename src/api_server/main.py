@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import os
+from logging.handlers import RotatingFileHandler
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -11,13 +13,24 @@ from src.api_server.routes.heart_rate import router as heart_rate_router
 from src.api_server.routes.sleep import router as sleep_router
 from src.api_server.routes.sync import router as sync_router, _run_sync
 from src.api_server.routes.webhooks import router as webhooks_router
+from src.api_server.routes.ai import router as ai_router
 from src.api_server.routes.weight import router as weight_router
 from src.api_server.routes.workouts import router as workouts_router
+from src.api_server.routes.debug import router as debug_router
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
+_LOG_FORMAT   = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+# os.getcwd() is the project root when uvicorn is started from there
+_LOG_DIR  = os.path.join(os.getcwd(), "logs")
+_LOG_FILE = os.path.join(_LOG_DIR, "app.log")
+os.makedirs(_LOG_DIR, exist_ok=True)
+
+logging.basicConfig(level=logging.INFO, format=_LOG_FORMAT)
+
+_file_handler = RotatingFileHandler(_LOG_FILE, maxBytes=2_000_000, backupCount=2, encoding="utf-8")
+_file_handler.setFormatter(logging.Formatter(_LOG_FORMAT))
+_file_handler.setLevel(logging.DEBUG)
+logging.getLogger().addHandler(_file_handler)
+
 logger = logging.getLogger(__name__)
 
 SYNC_INTERVAL_HOURS = 1
@@ -78,6 +91,8 @@ app.include_router(weight_router)
 app.include_router(workouts_router)
 app.include_router(sync_router)
 app.include_router(webhooks_router)
+app.include_router(ai_router)
+app.include_router(debug_router)
 
 
 @app.get("/health")

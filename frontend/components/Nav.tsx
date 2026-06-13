@@ -9,14 +9,19 @@ function NavItem({ href, label, icon, active }: { href: string; label: string; i
   return (
     <Link
       href={href}
-      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all ${
-        active ? "bg-[#8B0057]/20 border border-[#8B0057]/40" : "hover:bg-[#8B0057]/10"
-      }`}
-      style={{ color: active ? "var(--text-primary)" : "var(--text-muted)" }}
+      className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all"
+      style={active ? {
+        background: "var(--c-active-bg)",
+        border: "1px solid var(--c-active-brd)",
+        color: "var(--text-primary)",
+      } : {
+        border: "1px solid transparent",
+        color: "var(--text-muted)",
+      }}
     >
       <span className="text-base w-5 text-center">{icon}</span>
       <span className="font-medium">{label}</span>
-      {active && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[#FFD600]" />}
+      {active && <span className="ml-auto w-1.5 h-1.5 rounded-full" style={{ background: "var(--c-hl)" }} />}
     </Link>
   );
 }
@@ -27,7 +32,7 @@ export default function Nav({ username, onSync, onLogout }: {
   onLogout: () => void;
 }) {
   const pathname = usePathname();
-  const { theme, toggle } = useTheme();
+  const { theme, toggle, icon } = useTheme();
   const { visibleSections, openSettings } = useSettings();
 
   return (
@@ -42,11 +47,11 @@ export default function Nav({ username, onSync, onLogout }: {
           <MonsterLogo size={30} />
           <div>
             <span className="block text-sm font-black uppercase tracking-widest leading-none"
-              style={{ color: "var(--text-primary)", textShadow: "0 0 6px #8B0057, 0 0 14px #8B0057, 0 0 28px #620040, 0 0 50px rgba(139,0,87,0.4)" }}>
+              style={{ color: "var(--text-primary)", textShadow: "0 0 6px var(--c-main), 0 0 14px var(--c-main), 0 0 28px var(--c-main), 0 0 50px var(--c-glow)" }}>
               Monster
             </span>
-            <span className="block text-xs font-black uppercase tracking-[0.3em] text-[#FFD600] leading-none"
-              style={{ textShadow: "0 0 6px #FFD600, 0 0 14px rgba(255,214,0,0.5)" }}>
+            <span className="block text-xs font-black uppercase tracking-[0.3em] leading-none"
+              style={{ color: "var(--c-hl)", textShadow: "0 0 6px var(--c-hl), 0 0 14px var(--c-glow)" }}>
               Fit
             </span>
           </div>
@@ -63,8 +68,8 @@ export default function Nav({ username, onSync, onLogout }: {
         <div className="px-3 py-4 space-y-2" style={{ borderTop: "1px solid var(--border-col)" }}>
           <button
             onClick={onSync}
-            className="w-full text-xs bg-[#8B0057]/20 hover:bg-[#8B0057]/30 border border-[#8B0057]/40 px-3 py-2 rounded-xl transition-colors"
-            style={{ color: "var(--text-primary)" }}
+            className="w-full text-xs px-3 py-2 rounded-xl transition-colors"
+            style={{ background: "var(--c-active-bg)", border: "1px solid var(--c-active-brd)", color: "var(--text-primary)" }}
           >
             ↻ Sincronizar datos
           </button>
@@ -74,9 +79,9 @@ export default function Nav({ username, onSync, onLogout }: {
               <button
                 onClick={toggle}
                 className="text-sm hover:opacity-80 transition-opacity"
-                title={theme === "dark" ? "Modo claro" : "Modo oscuro"}
+                title={theme === "dark" ? "Modo claro" : theme === "light" ? "Tema Sakura" : "Modo oscuro"}
               >
-                {theme === "dark" ? "☀️" : "🌙"}
+                {icon}
               </button>
               <button
                 onClick={openSettings}
@@ -87,8 +92,10 @@ export default function Nav({ username, onSync, onLogout }: {
               </button>
               <button
                 onClick={onLogout}
-                className="text-xs hover:text-[#FF3B30] transition-colors px-2 py-1 rounded-lg"
+                className="text-xs transition-colors px-2 py-1 rounded-lg"
                 style={{ color: "var(--text-muted)", border: "1px solid var(--border-col)" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "#FF3B30")}
+                onMouseLeave={e => (e.currentTarget.style.color = "var(--text-muted)")}
               >
                 Salir
               </button>
@@ -105,17 +112,17 @@ export default function Nav({ username, onSync, onLogout }: {
         <div className="flex items-center gap-2">
           <MonsterLogo size={24} />
           <span className="text-sm font-black uppercase tracking-widest"
-            style={{ color: "var(--text-primary)", textShadow: "0 0 6px #8B0057, 0 0 16px #8B0057, 0 0 30px rgba(139,0,87,0.4)" }}>
-            Monster <span className="text-[#FFD600]" style={{ textShadow: "0 0 6px #FFD600, 0 0 12px rgba(255,214,0,0.5)" }}>Fit</span>
+            style={{ color: "var(--text-primary)", textShadow: "0 0 6px var(--c-main), 0 0 16px var(--c-main), 0 0 30px var(--c-glow)" }}>
+            Monster <span style={{ color: "var(--c-hl)", textShadow: "0 0 6px var(--c-hl), 0 0 12px var(--c-glow)" }}>Fit</span>
           </span>
         </div>
         <div className="flex items-center gap-3">
           <button onClick={toggle} className="text-sm" title="Cambiar tema">
-            {theme === "dark" ? "☀️" : "🌙"}
+            {icon}
           </button>
           <button onClick={openSettings} className="text-sm" title="Ajustes">⚙️</button>
           <button onClick={onSync} className="text-xs" style={{ color: "var(--text-muted)" }} title="Sincronizar">↻</button>
-          <button onClick={onLogout} className="text-xs font-medium text-[#FF3B30]">Salir</button>
+          <button onClick={onLogout} className="text-xs font-medium" style={{ color: "#FF3B30" }}>Salir</button>
         </div>
       </header>
 

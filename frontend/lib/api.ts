@@ -9,9 +9,9 @@ function authHeaders(): HeadersInit {
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
 
-async function get<T>(path: string): Promise<T> {
+async function get<T>(path: string, timeoutMs = 10_000): Promise<T> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10_000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(`${BASE}${path}`, {
       headers: authHeaders(),
@@ -69,4 +69,17 @@ export const api = {
     headers: { ...authHeaders(), "Content-Type": "application/json" },
     body: JSON.stringify({ weight }),
   }),
+  debugCounts: () => get<{
+    username: string;
+    tables: Record<string, { count: number; last?: Record<string, unknown>; error?: string }>;
+  }>("/debug/counts", 90_000),  // 90s — 5 sequential reads + possible quota retries
+  debugToken:  () => get<{ file_exists: boolean; has_token?: boolean; has_refresh?: boolean; expiry?: string; scopes?: string[] }>("/debug/token-status"),
+  debugLogs:   (n = 200) => get<{ logs: string[]; note?: string }>(`/debug/logs?n=${n}`),
+  deletePr:    (exercise: string) => fetch(`${BASE}/debug/pr?exercise=${encodeURIComponent(exercise)}`, { method: "DELETE", headers: authHeaders() }).then(r => r.json() as Promise<{ deleted: number; message?: string; error?: string }>),
+  aiInsights: () => get<{ response: string }>("/ai/insights"),
+  aiChat:     (question: string) => fetch(`${BASE}/ai/chat`, {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ question }),
+  }).then(r => r.json() as Promise<{ response: string }>),
 };

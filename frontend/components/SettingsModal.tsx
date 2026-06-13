@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useSettings, ALL_SECTIONS } from "@/lib/settings";
-import { useTheme } from "@/lib/theme";
+import { useTheme, THEME_META, type Theme } from "@/lib/theme";
 
 function GoalInput({
   label, value, unit, min, max, step = 1,
@@ -37,7 +37,7 @@ function GoalInput({
           className="w-24 text-right rounded-xl px-3 py-1.5 text-sm font-bold focus:outline-none"
           style={{
             background: "var(--surface-2)",
-            border: "1px solid #8B0057",
+            border: "1px solid var(--c-main)",
             color: "var(--text-primary)",
           }}
         />
@@ -49,7 +49,7 @@ function GoalInput({
 
 export default function SettingsModal() {
   const { settings, update, settingsOpen, closeSettings } = useSettings();
-  const { theme, toggle } = useTheme();
+  const { theme, setTheme } = useTheme();
 
   if (!settingsOpen) return null;
 
@@ -74,7 +74,7 @@ export default function SettingsModal() {
         style={{
           background: "var(--surface)",
           border: "1px solid var(--border-col)",
-          boxShadow: "0 -8px 40px rgba(0,0,0,0.5), 0 0 20px rgba(139,0,87,0.1)",
+          boxShadow: "0 -8px 40px rgba(0,0,0,0.5), 0 0 20px var(--c-glow)",
           maxHeight: "90vh",
           overflowY: "auto",
         }}
@@ -82,7 +82,7 @@ export default function SettingsModal() {
       >
         {/* LED top strip */}
         <div className="absolute top-0 left-8 right-8 h-px rounded-full"
-          style={{ background: "linear-gradient(90deg, transparent, #8B0057 50%, transparent)" }} />
+          style={{ background: "linear-gradient(90deg, transparent, var(--c-main) 50%, transparent)" }} />
 
         {/* Handle / header */}
         <div className="px-6 pt-5 pb-4 flex items-center justify-between"
@@ -103,29 +103,51 @@ export default function SettingsModal() {
           {/* ─ Theme ─ */}
           <div>
             <p className="text-[10px] uppercase tracking-widest font-semibold mb-3"
-              style={{ color: "#8B0057" }}>Apariencia</p>
-            <button
-              onClick={toggle}
-              className="w-full flex items-center justify-between py-3 rounded-2xl px-4 transition-all active:scale-98"
-              style={{ background: "var(--surface-2)", border: "1px solid var(--border-col)" }}
-            >
-              <div className="flex items-center gap-3">
-                <span className="text-xl">{theme === "dark" ? "🌙" : "☀️"}</span>
-                <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-                  Tema {theme === "dark" ? "oscuro" : "claro"}
-                </span>
-              </div>
-              <span className="text-xs px-2.5 py-1 rounded-lg font-medium"
-                style={{ background: "#8B0057", color: "white" }}>
-                {theme === "dark" ? "Cambiar a claro" : "Cambiar a oscuro"}
-              </span>
-            </button>
+              style={{ color: "var(--c-main)" }}>Apariencia</p>
+            <div className="grid grid-cols-3 gap-2">
+              {(["dark", "light", "sakura"] as Theme[]).map(t => {
+                const meta = THEME_META[t];
+                const active = theme === t;
+                const preview: Record<Theme, { bg: string; surface: string; dot: string }> = {
+                  dark:   { bg: "#0A0A0A", surface: "#1C1C1C", dot: "#8B0057"  },
+                  light:  { bg: "#F3F4F6", surface: "#FFFFFF", dot: "#8B0057"  },
+                  sakura: { bg: "#FDF4F7", surface: "#FCEAF3", dot: "#C2185B"  },
+                };
+                const p = preview[t];
+                return (
+                  <button
+                    key={t}
+                    onClick={() => setTheme(t)}
+                    className="flex flex-col items-center gap-2 p-3 rounded-2xl transition-all"
+                    style={{
+                      background: active ? "var(--c-active-bg)" : "var(--surface-2)",
+                      border: `1px solid ${active ? "var(--c-main)" : "var(--border-col)"}`,
+                      boxShadow: active ? `0 0 12px var(--c-glow)` : "none",
+                    }}
+                  >
+                    {/* Mini preview swatch */}
+                    <div className="w-full h-10 rounded-xl overflow-hidden relative"
+                      style={{ background: p.bg }}>
+                      <div className="absolute bottom-1 left-1 right-1 h-4 rounded-lg"
+                        style={{ background: p.surface }} />
+                      <div className="absolute bottom-2.5 right-2 w-2 h-2 rounded-full"
+                        style={{ background: p.dot }} />
+                    </div>
+                    <span className="text-base">{meta.icon}</span>
+                    <span className="text-[10px] font-semibold"
+                      style={{ color: active ? "var(--c-main)" : "var(--text-muted)" }}>
+                      {meta.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* ─ Sections ─ */}
           <div>
             <p className="text-[10px] uppercase tracking-widest font-semibold mb-3"
-              style={{ color: "#8B0057" }}>Secciones visibles</p>
+              style={{ color: "var(--c-main)" }}>Secciones visibles</p>
             <div className="space-y-1">
               {ALL_SECTIONS.map(s => {
                 const isOn = s.locked || settings.visibleSections.includes(s.key);
@@ -136,8 +158,8 @@ export default function SettingsModal() {
                     disabled={!!s.locked}
                     className="w-full flex items-center justify-between px-4 py-3 rounded-2xl transition-all"
                     style={{
-                      background: isOn ? "rgba(139,0,87,0.12)" : "var(--surface-2)",
-                      border: `1px solid ${isOn ? "rgba(139,0,87,0.35)" : "var(--border-col)"}`,
+                      background: isOn ? "var(--c-active-bg)"  : "var(--surface-2)",
+                      border: `1px solid ${isOn ? "var(--c-active-brd)" : "var(--border-col)"}`,
                       opacity: s.locked ? 0.6 : 1,
                     }}
                   >
@@ -155,7 +177,7 @@ export default function SettingsModal() {
                     </div>
                     {/* Toggle pill */}
                     <div className="relative w-11 h-6 rounded-full transition-all flex-shrink-0"
-                      style={{ background: isOn ? "#8B0057" : "var(--border-col)" }}>
+                      style={{ background: isOn ? "var(--c-main)" : "var(--border-col)" }}>
                       <div className="absolute top-1 w-4 h-4 rounded-full bg-white transition-all"
                         style={{ left: isOn ? "calc(100% - 20px)" : "4px", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }} />
                     </div>
@@ -165,10 +187,22 @@ export default function SettingsModal() {
             </div>
           </div>
 
+          {/* ─ Debug ─ */}
+          <div>
+            <p className="text-[10px] uppercase tracking-widest font-semibold mb-2"
+              style={{ color: "var(--c-main)" }}>Sistema</p>
+            <a href="/debug"
+              className="flex items-center justify-between py-2.5 px-3 rounded-xl text-sm transition-all"
+              style={{ background: "var(--surface-2)", border: "1px solid var(--border-col)", color: "var(--text-primary)" }}>
+              <span>🔍 Diagnóstico de datos</span>
+              <span style={{ color: "var(--text-muted)" }}>→</span>
+            </a>
+          </div>
+
           {/* ─ Goals ─ */}
           <div>
             <p className="text-[10px] uppercase tracking-widest font-semibold mb-1"
-              style={{ color: "#8B0057" }}>Objetivos diarios</p>
+              style={{ color: "var(--c-main)" }}>Objetivos diarios</p>
             <GoalInput label="Pasos" value={settings.stepGoal} unit="pasos"
               min={1000} max={50000} step={500}
               onChange={v => update({ stepGoal: v })} />

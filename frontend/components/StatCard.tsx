@@ -7,7 +7,7 @@ interface Props {
   icon: string;
 }
 
-export default function StatCard({ label, value, unit, sub, color = "#8B0057", icon }: Props) {
+export default function StatCard({ label, value, unit, sub, color = "var(--c-main)", icon }: Props) {
   return (
     <div
       className="rounded-2xl p-5 flex flex-col gap-3 transition-colors"

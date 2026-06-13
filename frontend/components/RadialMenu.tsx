@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import MonsterLogo from "./MonsterLogo";
 import { useSettings } from "@/lib/settings";
 
-const R = 95; // arc radius px
+const R = 95;
 
 function arcPositions(count: number): { x: number; y: number }[] {
   if (count === 0) return [];
@@ -63,15 +63,15 @@ export default function RadialMenu() {
                 <div
                   className="w-12 h-12 rounded-full flex items-center justify-center text-xl"
                   style={{
-                    background: isActive ? "#8B0057" : "var(--surface)",
-                    border: `1px solid ${isActive ? "#B5006E" : "var(--border-col)"}`,
-                    boxShadow: isActive ? "0 0 14px rgba(139,0,87,0.6)" : "0 4px 12px rgba(0,0,0,0.35)",
+                    background: isActive ? "var(--c-main)" : "var(--surface)",
+                    border: `1px solid ${isActive ? "var(--c-light)" : "var(--border-col)"}`,
+                    boxShadow: isActive ? "0 0 14px var(--c-glow)" : "0 4px 12px rgba(0,0,0,0.35)",
                   }}
                 >
                   {item.icon}
                 </div>
                 <span className="text-[9px] font-semibold tracking-wide"
-                  style={{ color: isActive ? "#8B0057" : "var(--text-muted)" }}>
+                  style={{ color: isActive ? "var(--c-main)" : "var(--text-muted)" }}>
                   {item.label}
                 </span>
               </Link>
@@ -79,7 +79,7 @@ export default function RadialMenu() {
           );
         })}
 
-        {/* Settings button — bottom-left when open */}
+        {/* Settings button */}
         <div
           className="absolute"
           style={{
@@ -118,10 +118,10 @@ export default function RadialMenu() {
           onClick={() => setOpen(o => !o)}
           className="w-14 h-14 rounded-full flex items-center justify-center relative"
           style={{
-            background: "linear-gradient(135deg, #8B0057, #620040)",
+            background: "linear-gradient(135deg, var(--c-main), var(--c-light))",
             boxShadow: open
-              ? "0 0 24px rgba(139,0,87,0.7), 0 0 50px rgba(139,0,87,0.35)"
-              : "0 0 16px rgba(139,0,87,0.45), 0 4px 16px rgba(0,0,0,0.4)",
+              ? "0 0 24px var(--c-glow), 0 0 50px var(--c-scan)"
+              : "0 0 16px var(--c-glow), 0 4px 16px rgba(0,0,0,0.4)",
             transform: open ? "scale(1.08)" : "scale(1)",
             transition: "transform 200ms ease, box-shadow 200ms ease",
           }}

@@ -1,147 +1,335 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { api, WorkoutRow, WeeklyRow } from "@/lib/api";
+import { api, WorkoutRow, WeeklyRow, PrRow, ExSummaryRow } from "@/lib/api";
 import AppShell from "@/components/AppShell";
-import { VolumeChart } from "@/components/Charts";
+import { VolumeChart, ExerciseProgressChart } from "@/components/Charts";
 import LoadingScreen from "@/components/LoadingScreen";
 
+// ── date helpers ──────────────────────────────────────────────────────────────
+const MONTHS: Record<string, number> = {
+  Jan:0, Feb:1, Mar:2, Apr:3, May:4, Jun:5,
+  Jul:6, Aug:7, Sep:8, Oct:9, Nov:10, Dec:11
+};
+function parseHevyDate(s: string): number {
+  const m = s.match(/^(\d+)\s+(\w+)\s+(\d+),\s+(\d+):(\d+)/);
+  if (!m) return 0;
+  return new Date(+m[3], MONTHS[m[2]] ?? 0, +m[1], +m[4], +m[5]).getTime();
+}
+function shortDate(s: string): string {
+  const m = s.match(/^(\d+)\s+(\w+)/);
+  return m ? `${m[1]} ${m[2]}` : s;
+}
+
+// ── session builder ───────────────────────────────────────────────────────────
+type SessionExercise = { name: string; sets: number; maxWeight: number; totalVolume: number };
+type Session = {
+  id: string; workout: string; date: string; ts: number;
+  totalVolume: number; totalSets: number;
+  exercises: SessionExercise[];
+  rows: WorkoutRow[];
+};
+
+function buildSessions(rows: WorkoutRow[]): Session[] {
+  const map = new Map<string, WorkoutRow[]>();
+  for (const r of rows) {
+    const key = `${r.workout}|||${r.date}`;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(r);
+  }
+  return Array.from(map.entries()).map(([key, sets]) => {
+    const sep = key.indexOf("|||");
+    const workout = key.slice(0, sep);
+    const date    = key.slice(sep + 3);
+    const exMap = new Map<string, WorkoutRow[]>();
+    for (const s of sets) {
+      if (!exMap.has(s.exercise)) exMap.set(s.exercise, []);
+      exMap.get(s.exercise)!.push(s);
+    }
+    const exercises: SessionExercise[] = Array.from(exMap.entries()).map(([name, exSets]) => ({
+      name, sets: exSets.length,
+      maxWeight:   Math.max(...exSets.map(s => s.weight)),
+      totalVolume: exSets.reduce((t, s) => t + s.volume, 0),
+    }));
+    return {
+      id: key, workout, date, ts: parseHevyDate(date),
+      totalVolume: sets.reduce((t, s) => t + s.volume, 0),
+      totalSets: sets.length, exercises, rows: sets,
+    };
+  }).sort((a, b) => b.ts - a.ts);
+}
+
+// ── progression builder ───────────────────────────────────────────────────────
+function buildProgression(rows: WorkoutRow[], exercise: string) {
+  const byDate = new Map<string, { maxWeight: number; volume: number; ts: number }>();
+  for (const r of rows.filter(r => r.exercise === exercise)) {
+    const existing = byDate.get(r.date);
+    const vol = (existing?.volume ?? 0) + r.volume;
+    const max = Math.max(existing?.maxWeight ?? 0, r.weight);
+    byDate.set(r.date, { maxWeight: max, volume: vol, ts: parseHevyDate(r.date) });
+  }
+  return Array.from(byDate.entries())
+    .map(([date, v]) => ({ date: shortDate(date), maxWeight: v.maxWeight, volume: v.volume, ts: v.ts }))
+    .sort((a, b) => a.ts - b.ts);
+}
+
+// ── tab types ─────────────────────────────────────────────────────────────────
+type Tab = "records" | "sesiones" | "progresion";
+
+// ── medal colors ─────────────────────────────────────────────────────────────
+const MEDAL = ["#FFD600", "#C0C0C0", "#CD7F32"];
+
+// ══════════════════════════════════════════════════════════════════════════════
 export default function WorkoutsPage() {
   const router = useRouter();
-  const [workouts, setWorkouts] = useState<WorkoutRow[]>([]);
-  const [weekly, setWeekly] = useState<WeeklyRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedExercise, setSelectedExercise] = useState<string>("all");
+  const [workouts,  setWorkouts]  = useState<WorkoutRow[]>([]);
+  const [weekly,    setWeekly]    = useState<WeeklyRow[]>([]);
+  const [prs,       setPrs]       = useState<PrRow[]>([]);
+  const [summary,   setSummary]   = useState<ExSummaryRow[]>([]);
+  const [loading,   setLoading]   = useState(true);
+  const [tab,       setTab]       = useState<Tab>("records");
+  const [expanded,  setExpanded]  = useState<Set<string>>(new Set());
+  const [selExercise, setSelExercise] = useState<string>("");
 
   const load = useCallback(async () => {
     try {
-      const [w, wk] = await Promise.all([api.workouts(), api.weeklyVolume()]);
-      setWorkouts(w.sort((a, b) => b.date.localeCompare(a.date)));
+      const [w, wk, p, s] = await Promise.all([
+        api.workouts(), api.weeklyVolume(), api.prs(), api.exerciseSummary(),
+      ]);
+      setWorkouts(w);
       setWeekly(wk.sort((a, b) => a.week.localeCompare(b.week)));
+      setPrs(p.sort((a, b) => b.pr_weight - a.pr_weight));
+      setSummary(s.sort((a, b) => b.total_volume - a.total_volume));
     } catch { router.replace("/login"); }
     finally { setLoading(false); }
   }, [router]);
 
   useEffect(() => { load(); }, [load]);
 
+  const sessions   = useMemo(() => buildSessions(workouts), [workouts]);
+  const exercises  = useMemo(() => [...new Set(workouts.map(r => r.exercise))].sort(), [workouts]);
+
+  useEffect(() => {
+    if (!selExercise && exercises.length > 0) setSelExercise(exercises[0]);
+  }, [exercises, selExercise]);
+
+  const progression = useMemo(
+    () => selExercise ? buildProgression(workouts, selExercise) : [],
+    [workouts, selExercise]
+  );
+
   if (loading) return <LoadingScreen color="#FFD600" />;
 
-  const exercises = ["all", ...Array.from(new Set(workouts.map(w => w.exercise))).sort()];
-  const filtered = selectedExercise === "all" ? workouts : workouts.filter(w => w.exercise === selectedExercise);
+  const totalVolume  = workouts.reduce((s, w) => s + w.volume, 0);
+  const totalSets    = workouts.length;
+  const totalSess    = sessions.length;
+  const totalEx      = exercises.length;
 
-  const uniqueSessions  = new Set(workouts.map(w => w.workout)).size;
-  const totalVolume     = workouts.reduce((s, w) => s + w.volume, 0);
-  const totalSets       = workouts.length;
-  const uniqueExercises = new Set(workouts.map(w => w.exercise)).size;
+  const toggleSession = (id: string) =>
+    setExpanded(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
-  const prByExercise = exercises.slice(1).map(ex => {
-    const rows = workouts.filter(w => w.exercise === ex);
-    const pr = rows.reduce((b, r) => r.weight > b.weight ? r : b, rows[0]);
-    return { exercise: ex, weight: pr?.weight ?? 0, date: pr?.date ?? "" };
-  }).sort((a, b) => b.weight - a.weight).slice(0, 10);
-
-  const summaryStats = [
-    { label: "Sesiones",       value: uniqueSessions,                          color: "#FFD600" },
-    { label: "Series totales", value: totalSets.toLocaleString(),              color: "#8B0057" },
-    { label: "Volumen total",  value: `${Math.round(totalVolume / 1000)}k`, unit: "kg", color: "#B5006E" },
-    { label: "Ejercicios",     value: uniqueExercises,                         color: "#FF9500" },
+  const TABS: { key: Tab; label: string }[] = [
+    { key: "records",   label: "Records" },
+    { key: "sesiones",  label: "Sesiones" },
+    { key: "progresion",label: "Progresión" },
   ];
 
   return (
     <AppShell>
-      <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
-        <div>
-          <div className="h-0.5 w-12 bg-gradient-to-r from-[#FFD600] to-[#8B0057] rounded-full mb-3" />
-          <h1 className="text-xl font-bold" style={{ color: "var(--text-primary)" }}>Entrenamientos</h1>
-          <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{uniqueSessions} sesiones · {uniqueExercises} ejercicios</p>
+      <main className="max-w-2xl mx-auto px-4 py-5 space-y-4">
+
+        {/* header */}
+        <div className="animate-fade-up">
+          <p className="text-[9px] tracking-[0.3em] font-semibold uppercase" style={{ color: "#FFD600" }}>Hevy</p>
+          <div className="flex items-center justify-between mt-0.5">
+            <h1 className="text-xl font-black" style={{ color: "var(--text-primary)" }}>Entrenamientos</h1>
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>{totalSess} sesiones</span>
+          </div>
         </div>
 
+        {/* stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {summaryStats.map(m => (
-            <div key={m.label} className="rounded-xl p-4" style={{ background: "var(--surface)", border: "1px solid var(--border-col)" }}>
-              <p className="text-xs uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>{m.label}</p>
-              <p className="text-2xl font-bold" style={{ color: m.color }}>
-                {m.value}
-                {m.unit && <span className="text-sm font-normal ml-1" style={{ color: "var(--text-muted)" }}>{m.unit}</span>}
-              </p>
+          {[
+            { label: "Sesiones",     value: totalSess,                               color: "#FFD600", delay: 50  },
+            { label: "Ejercicios",   value: totalEx,                                 color: "#8B0057", delay: 100 },
+            { label: "Series",       value: totalSets.toLocaleString(),              color: "#B5006E", delay: 150 },
+            { label: "Volumen total",value: `${Math.round(totalVolume/1000)}k kg`,   color: "#FF6B35", delay: 200 },
+          ].map(s => (
+            <div key={s.label} className="scan-on-mount rounded-2xl p-4 animate-fade-up"
+              style={{ background: "var(--surface)", border: "1px solid var(--border-col)", animationDelay: `${s.delay}ms` }}>
+              <p className="text-[9px] uppercase tracking-widest mb-1" style={{ color: "var(--text-muted)" }}>{s.label}</p>
+              <p className="text-xl font-black leading-none" style={{ color: s.color }}>{s.value}</p>
             </div>
           ))}
         </div>
 
-        {weekly.length > 0 && <VolumeChart data={weekly} />}
+        {/* volume chart */}
+        {weekly.length > 0 && (
+          <div className="animate-fade-up" style={{ animationDelay: "220ms" }}>
+            <VolumeChart data={weekly} />
+          </div>
+        )}
 
-        {prByExercise.length > 0 && (
-          <div className="rounded-2xl overflow-hidden" style={{ background: "var(--surface)", border: "1px solid var(--border-col)" }}>
-            <div className="px-5 py-3 flex items-center gap-2" style={{ borderBottom: "1px solid var(--border-col)" }}>
-              <span className="text-base">🏆</span>
-              <h3 className="text-xs uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Records personales (top 10)</h3>
-            </div>
-            <div>
-              {prByExercise.map((pr, i) => (
-                <div key={pr.exercise} className="px-5 py-3 flex items-center justify-between row-hover transition-colors"
-                  style={{ borderBottom: "1px solid var(--border-col)" }}>
+        {/* tabs */}
+        <div className="animate-fade-up" style={{ animationDelay: "260ms" }}>
+          <div className="flex gap-2 mb-4">
+            {TABS.map(t => (
+              <button key={t.key} onClick={() => setTab(t.key)}
+                className="px-4 py-2 rounded-xl text-xs font-bold transition-all"
+                style={tab === t.key
+                  ? { background: "linear-gradient(135deg,#8B0057,#620040)", color: "#fff", boxShadow: "0 0 12px rgba(139,0,87,0.4)" }
+                  : { background: "var(--surface)", color: "var(--text-muted)", border: "1px solid var(--border-col)" }
+                }>
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* ── RECORDS tab ── */}
+          {tab === "records" && (
+            <div className="space-y-3">
+              {prs.length === 0 ? (
+                <p className="text-sm text-center py-8" style={{ color: "var(--text-muted)" }}>Sin records aún</p>
+              ) : prs.map((pr, i) => (
+                <div key={pr.exercise}
+                  className="rounded-2xl px-4 py-3.5 flex items-center justify-between transition-all hover:scale-[1.01]"
+                  style={{
+                    background: "var(--surface)",
+                    border: `1px solid ${i < 3 ? MEDAL[i] + "40" : "var(--border-col)"}`,
+                    boxShadow: i < 3 ? `0 0 12px ${MEDAL[i]}18` : "none",
+                  }}>
                   <div className="flex items-center gap-3">
-                    <span className="text-xs w-5" style={{ color: "var(--text-muted)" }}>{i + 1}</span>
-                    <span className="text-sm" style={{ color: "var(--text-primary)" }}>{pr.exercise}</span>
+                    <span className="text-sm font-black w-5 text-center"
+                      style={{ color: i < 3 ? MEDAL[i] : "var(--text-muted)" }}>
+                      {i < 3 ? ["🥇","🥈","🥉"][i] : `${i+1}`}
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{pr.exercise}</p>
+                      {(() => {
+                        const ex = summary.find(s => s.exercise === pr.exercise);
+                        return ex ? (
+                          <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+                            {ex.total_sets} series · {Math.round(ex.total_volume / 1000)}k kg vol
+                          </p>
+                        ) : null;
+                      })()}
+                    </div>
                   </div>
                   <div className="text-right">
-                    <span className="text-sm font-bold text-[#FFD600]">{pr.weight} kg</span>
-                    <span className="text-xs ml-2" style={{ color: "var(--text-muted)" }}>{pr.date}</span>
+                    <p className="text-lg font-black" style={{ color: i < 3 ? MEDAL[i] : "var(--text-primary)" }}>
+                      {pr.pr_weight} <span className="text-xs font-normal" style={{ color: "var(--text-muted)" }}>kg</span>
+                    </p>
+                    <p className="text-[9px]" style={{ color: "var(--text-muted)" }}>{shortDate(pr.date)}</p>
                   </div>
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          )}
 
-        <div className="rounded-2xl overflow-hidden" style={{ background: "var(--surface)", border: "1px solid var(--border-col)" }}>
-          <div className="px-5 py-3" style={{ borderBottom: "1px solid var(--border-col)" }}>
-            <h3 className="text-xs uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>Historial de series</h3>
-            <div className="flex flex-wrap gap-2">
-              {exercises.slice(0, 15).map(ex => (
-                <button
-                  key={ex}
-                  onClick={() => setSelectedExercise(ex)}
-                  className="text-xs px-2.5 py-1 rounded-lg transition-colors"
-                  style={selectedExercise === ex
-                    ? { background: "#8B0057", color: "#fff" }
-                    : { background: "var(--surface-2)", color: "var(--text-muted)" }
-                  }
-                >
-                  {ex === "all" ? "Todos" : ex}
-                </button>
-              ))}
+          {/* ── SESIONES tab ── */}
+          {tab === "sesiones" && (
+            <div className="space-y-3">
+              {sessions.map(sess => {
+                const open = expanded.has(sess.id);
+                return (
+                  <div key={sess.id} className="rounded-2xl overflow-hidden transition-all"
+                    style={{ background: "var(--surface)", border: "1px solid var(--border-col)" }}>
+                    <button className="w-full px-5 py-4 flex items-center justify-between text-left"
+                      onClick={() => toggleSession(sess.id)}>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold truncate" style={{ color: "var(--text-primary)" }}>{sess.workout}</p>
+                        <p className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>
+                          {shortDate(sess.date)} · {sess.exercises.length} ejercicios · {sess.totalSets} series
+                        </p>
+                      </div>
+                      <div className="text-right ml-4 flex-shrink-0">
+                        <p className="text-sm font-black text-[#FFD600]">{Math.round(sess.totalVolume / 1000)}k <span className="text-[10px] font-normal" style={{ color: "var(--text-muted)" }}>kg</span></p>
+                        <p className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>{open ? "▲" : "▼"}</p>
+                      </div>
+                    </button>
+
+                    {open && (
+                      <div style={{ borderTop: "1px solid var(--border-col)" }}>
+                        {sess.exercises.map(ex => (
+                          <div key={ex.name} className="px-5 py-3 flex items-center justify-between row-hover"
+                            style={{ borderBottom: "1px solid var(--border-col)" }}>
+                            <div>
+                              <p className="text-sm" style={{ color: "var(--text-primary)" }}>{ex.name}</p>
+                              <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>{ex.sets} series</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-bold text-[#FFD600]">{ex.maxWeight} kg</p>
+                              <p className="text-[9px]" style={{ color: "var(--text-muted)" }}>{Math.round(ex.totalVolume)} kg vol</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr style={{ borderBottom: "1px solid var(--border-col)" }}>
-                  {["Fecha", "Sesión", "Ejercicio", "Reps", "Peso", "Volumen"].map(h => (
-                    <th key={h} className="text-left px-4 py-2.5 text-xs uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>{h}</th>
+          )}
+
+          {/* ── PROGRESIÓN tab ── */}
+          {tab === "progresion" && (
+            <div className="space-y-4">
+              {/* exercise selector */}
+              <div>
+                <p className="text-[9px] uppercase tracking-widest mb-2" style={{ color: "var(--text-muted)" }}>Selecciona ejercicio</p>
+                <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
+                  {exercises.map(ex => (
+                    <button key={ex} onClick={() => setSelExercise(ex)}
+                      className="text-xs px-3 py-1.5 rounded-xl transition-all font-medium"
+                      style={selExercise === ex
+                        ? { background: "#8B0057", color: "#fff", boxShadow: "0 0 8px rgba(139,0,87,0.4)" }
+                        : { background: "var(--surface)", color: "var(--text-muted)", border: "1px solid var(--border-col)" }
+                      }>
+                      {ex}
+                    </button>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.slice(0, 100).map((r, i) => (
-                  <tr key={i} className="row-hover transition-colors" style={{ borderBottom: "1px solid var(--border-col)" }}>
-                    <td className="px-4 py-2.5" style={{ color: "var(--text-muted)" }}>{r.date}</td>
-                    <td className="px-4 py-2.5 max-w-[120px] truncate" style={{ color: "var(--text-muted)" }}>{r.workout}</td>
-                    <td className="px-4 py-2.5" style={{ color: "var(--text-primary)" }}>{r.exercise}</td>
-                    <td className="px-4 py-2.5 text-[#B5006E]">{r.reps}</td>
-                    <td className="px-4 py-2.5 font-semibold text-[#FFD600]">{r.weight} kg</td>
-                    <td className="px-4 py-2.5" style={{ color: "var(--text-muted)" }}>{r.volume} kg</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {filtered.length > 100 && (
-              <p className="text-xs text-center py-3" style={{ color: "var(--text-muted)" }}>
-                Mostrando 100 de {filtered.length} series
-              </p>
-            )}
-          </div>
+                </div>
+              </div>
+
+              {/* progression chart */}
+              {selExercise && progression.length > 0 && (
+                <>
+                  <ExerciseProgressChart data={progression} exercise={selExercise} />
+
+                  {/* exercise stats */}
+                  {(() => {
+                    const ex   = summary.find(s => s.exercise === selExercise);
+                    const pr   = prs.find(p => p.exercise === selExercise);
+                    const first = progression[0];
+                    const last  = progression[progression.length - 1];
+                    const gain  = first && last && first.maxWeight > 0
+                      ? Math.round(((last.maxWeight - first.maxWeight) / first.maxWeight) * 100) : 0;
+                    return (
+                      <div className="grid grid-cols-3 gap-3">
+                        {[
+                          { label: "PR actual",   value: `${pr?.pr_weight ?? last?.maxWeight ?? 0} kg`, color: "#FFD600" },
+                          { label: "Series total", value: ex?.total_sets.toLocaleString() ?? "—",       color: "#8B0057" },
+                          { label: "Progreso",    value: `${gain >= 0 ? "+" : ""}${gain}%`,             color: gain >= 0 ? "#00C950" : "#FF6B35" },
+                        ].map(s => (
+                          <div key={s.label} className="rounded-2xl p-3"
+                            style={{ background: "var(--surface)", border: "1px solid var(--border-col)" }}>
+                            <p className="text-[9px] uppercase tracking-widest mb-0.5" style={{ color: "var(--text-muted)" }}>{s.label}</p>
+                            <p className="text-lg font-black" style={{ color: s.color }}>{s.value}</p>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </>
+              )}
+
+              {selExercise && progression.length === 0 && (
+                <p className="text-sm text-center py-8" style={{ color: "var(--text-muted)" }}>Sin datos para este ejercicio</p>
+              )}
+            </div>
+          )}
         </div>
+
       </main>
     </AppShell>
   );

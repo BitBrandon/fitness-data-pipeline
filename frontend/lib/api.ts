@@ -50,14 +50,18 @@ export type SleepRow     = { date: string; duration_hours: number; deep_min: num
 export type WorkoutRow   = { workout: string; date: string; exercise: string; reps: number; weight: number; volume: number };
 export type WeightRow    = { date: string; weight: number };
 export type WeeklyRow    = { week: string; total_volume: number; total_sets: number };
+export type PrRow        = { exercise: string; pr_weight: number; date: string };
+export type ExSummaryRow = { exercise: string; total_sets: number; max_weight: number; total_volume: number };
 
 export const api = {
-  activity:    () => get<ActivityRow[]>("/activity"),
-  heartRate:   () => get<HeartRateRow[]>("/heart-rate"),
-  sleep:       () => get<SleepRow[]>("/sleep"),
-  workouts:    () => get<WorkoutRow[]>("/workouts"),
-  weeklyVolume:() => get<WeeklyRow[]>("/workouts/weekly-volume"),
-  weight:      () => get<WeightRow[]>("/weight"),
+  activity:        () => get<ActivityRow[]>("/activity"),
+  heartRate:       () => get<HeartRateRow[]>("/heart-rate"),
+  sleep:           () => get<SleepRow[]>("/sleep"),
+  workouts:        () => get<WorkoutRow[]>("/workouts"),
+  weeklyVolume:    () => get<WeeklyRow[]>("/workouts/weekly-volume"),
+  prs:             () => get<PrRow[]>("/workouts/prs"),
+  exerciseSummary: () => get<ExSummaryRow[]>("/workouts/summary"),
+  weight:          () => get<WeightRow[]>("/weight"),
   sync:        (days = 30) => fetch(`${BASE}/sync?days=${days}`, { method: "POST", headers: authHeaders() }),
   syncStatus:  () => get<{ state: string; pct: number; step: string; error: string | null }>("/sync/status"),
   logWeight:   (weight: number) => fetch(`${BASE}/weight`, {

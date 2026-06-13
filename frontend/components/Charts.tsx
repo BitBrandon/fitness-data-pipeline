@@ -1,9 +1,7 @@
 "use client";
 import {
-  AreaChart, Area, BarChart, Bar, LineChart, Line,
-  ComposedChart, ReferenceLine,
-  XAxis, YAxis, Tooltip, ResponsiveContainer,
-  CartesianGrid, Cell, defs,
+  AreaChart, Area, BarChart, Bar, ComposedChart, Line, ReferenceLine,
+  XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
 import { useTheme } from "@/lib/theme";
 
@@ -168,6 +166,44 @@ export function VolumeChart({ data }: { data: { week: string; total_volume: numb
             activeDot={{ r: 5, fill: "#fff", stroke: "#FFD600", strokeWidth: 2 }}
             name="Volumen" />
         </AreaChart>
+      </ResponsiveContainer>
+    </Card>
+  );
+}
+
+/* ── Exercise progression (max weight per session) ── */
+export function ExerciseProgressChart({ data, exercise }: {
+  data: { date: string; maxWeight: number; volume: number }[];
+  exercise: string;
+}) {
+  const c = useC();
+  if (data.length < 2) return (
+    <div className="flex items-center justify-center h-40 text-xs" style={{ color: "var(--text-muted)" }}>
+      Pocos datos para mostrar progresión
+    </div>
+  );
+  return (
+    <Card title={`Progresión — ${exercise}`} accent="#FFD600">
+      <ResponsiveContainer width="100%" height={180}>
+        <ComposedChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+          <defs>
+            <linearGradient id="gProg" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   stopColor="#FFD600" stopOpacity={0.3} />
+              <stop offset="100%" stopColor="#FFD600" stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="2 4" stroke={c.grid} vertical={false} />
+          <XAxis dataKey="date" tick={{ fill: c.tick, fontSize: 9 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+          <YAxis yAxisId="w" tick={{ fill: c.tick, fontSize: 10 }} axisLine={false} tickLine={false} width={36} unit="kg" />
+          <YAxis yAxisId="v" orientation="right" tick={{ fill: c.tick, fontSize: 9 }} axisLine={false} tickLine={false} width={36}
+            tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(1)}k` : String(v)} />
+          <Tooltip content={<CustomTooltip />} />
+          <Area yAxisId="v" dataKey="volume" stroke="none" fill="url(#gProg)" name="Volumen" fillOpacity={1} />
+          <Line yAxisId="w" dataKey="maxWeight" stroke="#FFD600" strokeWidth={2.5}
+            dot={{ fill: "#FFD600", r: 3, strokeWidth: 0 }}
+            activeDot={{ r: 5, fill: "#fff", stroke: "#FFD600", strokeWidth: 2 }}
+            name="Peso máx (kg)" />
+        </ComposedChart>
       </ResponsiveContainer>
     </Card>
   );

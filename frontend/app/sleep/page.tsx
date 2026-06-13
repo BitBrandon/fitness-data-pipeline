@@ -4,11 +4,43 @@ import { useRouter } from "next/navigation";
 import { api, SleepRow } from "@/lib/api";
 import AppShell from "@/components/AppShell";
 import { SleepChart } from "@/components/Charts";
-import MetricBox from "@/components/MetricBox";
 import LoadingScreen from "@/components/LoadingScreen";
+import { useSettings } from "@/lib/settings";
+
+function sleepScore(r: SleepRow, goalH: number): number {
+  const total = r.deep_min + r.rem_min + r.light_min;
+  const dur  = Math.min(50, (r.duration_hours / goalH) * 50);
+  const qual = total > 0 ? Math.min(50, ((r.deep_min + r.rem_min) / total) * 50) : 0;
+  return Math.round(dur + qual);
+}
+
+function scoreColor(s: number) {
+  return s >= 80 ? "#00C950" : s >= 60 ? "#FFD600" : "#FF6B35";
+}
+
+function PhaseBar({ deep, rem, light, awake }: { deep: number; rem: number; light: number; awake: number }) {
+  const total = deep + rem + light + awake || 1;
+  const segs = [
+    { v: deep,  c: "#8B0057",  label: "Profundo" },
+    { v: rem,   c: "#B5006E",  label: "REM" },
+    { v: light, c: "#2a2a2a",  label: "Ligero" },
+    { v: awake, c: "#1a1a1a",  label: "Despierto" },
+  ];
+  return (
+    <div className="h-2.5 rounded-full overflow-hidden flex gap-px">
+      {segs.map(s => s.v > 0 && (
+        <div key={s.label} title={`${s.label}: ${s.v}min`}
+          style={{ width: `${(s.v / total) * 100}%`, background: s.c, minWidth: 3 }} />
+      ))}
+    </div>
+  );
+}
 
 export default function SleepPage() {
   const router = useRouter();
+  const { settings } = useSettings();
+  const GOAL_H = settings.sleepGoalH ?? 8;
+
   const [data, setData] = useState<SleepRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -21,93 +53,158 @@ export default function SleepPage() {
   }, [router]);
 
   useEffect(() => { load(); }, [load]);
-
   if (loading) return <LoadingScreen />;
 
-  const last = data[data.length - 1];
-  const avg = (key: keyof SleepRow) => data.length
-    ? Math.round((data.reduce((s, r) => s + Number(r[key]), 0) / data.length) * 10) / 10
-    : 0;
+  const last  = data[data.length - 1];
+  const avg   = (k: keyof SleepRow) =>
+    data.length ? Math.round((data.reduce((s, r) => s + Number(r[k]), 0) / data.length) * 10) / 10 : 0;
+  const best  = data.reduce((b, r) => r.duration_hours > (b?.duration_hours ?? 0) ? r : b, data[0]);
 
-  const best = data.reduce((b, r) => r.duration_hours > (b?.duration_hours ?? 0) ? r : b, data[0]);
+  // 7-day trend: last 7 vs prev 7
+  const last7  = data.slice(-7);
+  const prev7  = data.slice(-14, -7);
+  const avgScore7  = last7.length  ? Math.round(last7.reduce((s, r)  => s + sleepScore(r, GOAL_H), 0) / last7.length)  : null;
+  const avgScorePrev = prev7.length ? Math.round(prev7.reduce((s, r) => s + sleepScore(r, GOAL_H), 0) / prev7.length) : null;
+  const trend  = avgScore7 != null && avgScorePrev != null
+    ? avgScore7 - avgScorePrev : null;
+
+  const lastScore = last ? sleepScore(last, GOAL_H) : null;
 
   return (
     <AppShell>
-      <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
-        <div>
-          <div className="h-0.5 w-12 bg-gradient-to-r from-[#8B0057] to-[#FFD600] rounded-full mb-3" />
-          <h1 className="text-xl font-bold" style={{ color: "var(--text-primary)" }}>Sueño</h1>
-          <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{data.length} noches registradas</p>
+      <main className="max-w-2xl mx-auto px-4 py-5 space-y-4">
+
+        {/* header */}
+        <div className="animate-fade-up">
+          <p className="text-[9px] tracking-[0.3em] font-semibold uppercase" style={{ color: "#8B0057" }}>Sueño</p>
+          <div className="flex items-center justify-between mt-0.5">
+            <h1 className="text-xl font-black" style={{ color: "var(--text-primary)" }}>Historial de sueño</h1>
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>{data.length} noches</span>
+          </div>
         </div>
 
-        {last && (
-          <div className="rounded-2xl p-5" style={{ background: "var(--surface)", border: "1px solid rgba(139,0,87,0.3)" }}>
-            <p className="text-xs text-[#8B0057] uppercase tracking-wider mb-3">Última noche · {last.date}</p>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              <MetricBox label="Total" value={last.duration_hours} unit="h" color="#FFD600" />
-              <MetricBox label="Profundo" value={last.deep_min} unit="min" color="#8B0057" />
-              <MetricBox label="REM" value={last.rem_min} unit="min" color="#B5006E" />
-              <MetricBox label="Ligero" value={last.light_min} unit="min" color="var(--text-muted)" />
-              <MetricBox label="Despierto" value={last.awake_min} unit="min" color="var(--text-muted)" />
+        {/* última noche */}
+        {last && lastScore !== null && (
+          <div className="scan-on-mount rounded-2xl p-5 animate-fade-up"
+            style={{ background: "var(--surface)", border: "1px solid var(--border-glow)", boxShadow: "0 0 24px rgba(139,0,87,0.1)", animationDelay: "50ms" }}>
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <p className="text-[9px] uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Última noche · {last.date}</p>
+                <p className="text-4xl font-black mt-1" style={{ color: "var(--text-primary)", textShadow: "0 0 20px rgba(255,214,0,0.25)" }}>
+                  {last.duration_hours}<span className="text-lg font-normal ml-1" style={{ color: "var(--text-muted)" }}>h</span>
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-[9px] uppercase tracking-widest mb-1" style={{ color: "var(--text-muted)" }}>Score</p>
+                <p className="text-3xl font-black" style={{ color: scoreColor(lastScore) }}>{lastScore}</p>
+              </div>
+            </div>
+
+            <PhaseBar deep={last.deep_min} rem={last.rem_min} light={last.light_min} awake={last.awake_min} />
+
+            <div className="flex gap-4 mt-3 flex-wrap text-xs">
+              {[
+                { label: "Profundo", v: last.deep_min,  c: "#8B0057" },
+                { label: "REM",      v: last.rem_min,   c: "#B5006E" },
+                { label: "Ligero",   v: last.light_min, c: "var(--text-muted)" },
+                { label: "Despierto",v: last.awake_min, c: "var(--text-muted)" },
+              ].map(s => (
+                <span key={s.label} className="flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: s.c }} />
+                  <span style={{ color: "var(--text-muted)" }}>{s.label}</span>
+                  <strong style={{ color: "var(--text-primary)" }}>{s.v}m</strong>
+                </span>
+              ))}
             </div>
           </div>
         )}
 
-        <div>
-          <h2 className="text-sm font-semibold mb-3" style={{ color: "var(--text-primary)" }}>Promedios ({data.length} noches)</h2>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <MetricBox label="Horas/noche" value={avg("duration_hours")} unit="h" color="#FFD600" />
-            <MetricBox label="Profundo avg" value={avg("deep_min")} unit="min" color="#8B0057" />
-            <MetricBox label="REM avg" value={avg("rem_min")} unit="min" color="#B5006E" />
-            <MetricBox label="Ligero avg" value={avg("light_min")} unit="min" color="var(--text-muted)" />
-            <MetricBox label="Despierto avg" value={avg("awake_min")} unit="min" color="var(--text-muted)" />
-          </div>
+        {/* stats row */}
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { label: "Promedio", value: `${avg("duration_hours")}h`, color: "#FFD600", delay: 100 },
+            { label: "Deep avg", value: `${avg("deep_min")}m`,       color: "#8B0057", delay: 150 },
+            { label: "REM avg",  value: `${avg("rem_min")}m`,        color: "#B5006E", delay: 200 },
+          ].map(s => (
+            <div key={s.label} className="rounded-2xl p-4 animate-fade-up"
+              style={{ background: "var(--surface)", border: "1px solid var(--border-col)", animationDelay: `${s.delay}ms` }}>
+              <p className="text-[9px] uppercase tracking-widest mb-1" style={{ color: "var(--text-muted)" }}>{s.label}</p>
+              <p className="text-xl font-black" style={{ color: s.color }}>{s.value}</p>
+            </div>
+          ))}
         </div>
 
-        {best && (
-          <div className="rounded-xl px-4 py-3 flex items-center gap-3"
-            style={{ background: "var(--surface)", border: "1px solid rgba(255,214,0,0.2)" }}>
-            <span className="text-lg">🏆</span>
-            <div>
-              <p className="text-xs text-[#FFD600] uppercase tracking-wider">Mejor noche</p>
-              <p className="text-sm" style={{ color: "var(--text-primary)" }}>
-                {best.date}, <span className="font-bold">{best.duration_hours}h</span>
-                <span style={{ color: "var(--text-muted)" }}> ({best.deep_min}min profundo · {best.rem_min}min REM)</span>
+        {/* trend + best */}
+        <div className="grid grid-cols-2 gap-3 animate-fade-up" style={{ animationDelay: "240ms" }}>
+          <div className="rounded-2xl p-4" style={{ background: "var(--surface)", border: "1px solid var(--border-col)" }}>
+            <p className="text-[9px] uppercase tracking-widest mb-1" style={{ color: "var(--text-muted)" }}>Tendencia 7d</p>
+            {trend !== null ? (
+              <p className="text-xl font-black" style={{ color: trend >= 0 ? "#00C950" : "#FF6B35" }}>
+                {trend >= 0 ? "+" : ""}{trend} pts
+              </p>
+            ) : (
+              <p className="text-xl font-black" style={{ color: "var(--text-muted)" }}>—</p>
+            )}
+            {avgScore7 !== null && (
+              <p className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>
+                Score medio: {avgScore7}
+              </p>
+            )}
+          </div>
+          {best && (
+            <div className="rounded-2xl p-4" style={{ background: "var(--surface)", border: "1px solid rgba(255,214,0,0.2)" }}>
+              <p className="text-[9px] uppercase tracking-widest mb-1" style={{ color: "var(--text-muted)" }}>Mejor noche</p>
+              <p className="text-xl font-black text-[#FFD600]">{best.duration_hours}h</p>
+              <p className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>
+                {best.date} · {best.deep_min}m deep
               </p>
             </div>
+          )}
+        </div>
+
+        {/* chart */}
+        {data.length > 0 && (
+          <div className="animate-fade-up" style={{ animationDelay: "280ms" }}>
+            <SleepChart data={data} />
           </div>
         )}
 
-        {data.length > 0 && <SleepChart data={data} />}
-
-        <div className="rounded-2xl overflow-hidden" style={{ background: "var(--surface)", border: "1px solid var(--border-col)" }}>
+        {/* history table */}
+        <div className="rounded-2xl overflow-hidden animate-fade-up"
+          style={{ background: "var(--surface)", border: "1px solid var(--border-col)", animationDelay: "320ms" }}>
           <div className="px-5 py-3" style={{ borderBottom: "1px solid var(--border-col)" }}>
-            <h3 className="text-xs uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Historial completo</h3>
+            <h3 className="text-[9px] uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Historial completo</h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--border-col)" }}>
-                  {["Fecha", "Total", "Profundo", "REM", "Ligero", "Despierto"].map(h => (
-                    <th key={h} className="text-left px-4 py-2.5 text-xs uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>{h}</th>
+                  {["Fecha", "Total", "Score", "Fases", "Deep", "REM"].map(h => (
+                    <th key={h} className="text-left px-4 py-2.5 text-[9px] uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {[...data].reverse().map(r => (
-                  <tr key={r.date} className="row-hover transition-colors" style={{ borderBottom: "1px solid var(--border-col)" }}>
-                    <td className="px-4 py-2.5" style={{ color: "var(--text-muted)" }}>{r.date}</td>
-                    <td className="px-4 py-2.5 font-semibold text-[#FFD600]">{r.duration_hours}h</td>
-                    <td className="px-4 py-2.5 text-[#8B0057]">{r.deep_min}min</td>
-                    <td className="px-4 py-2.5 text-[#B5006E]">{r.rem_min}min</td>
-                    <td className="px-4 py-2.5" style={{ color: "var(--text-muted)" }}>{r.light_min}min</td>
-                    <td className="px-4 py-2.5" style={{ color: "var(--text-muted)" }}>{r.awake_min}min</td>
-                  </tr>
-                ))}
+                {[...data].reverse().map(r => {
+                  const sc = sleepScore(r, GOAL_H);
+                  return (
+                    <tr key={r.date} className="row-hover transition-colors" style={{ borderBottom: "1px solid var(--border-col)" }}>
+                      <td className="px-4 py-2.5 text-xs" style={{ color: "var(--text-muted)" }}>{r.date}</td>
+                      <td className="px-4 py-2.5 font-semibold text-[#FFD600]">{r.duration_hours}h</td>
+                      <td className="px-4 py-2.5 font-bold text-xs" style={{ color: scoreColor(sc) }}>{sc}</td>
+                      <td className="px-4 py-2.5 w-24">
+                        <PhaseBar deep={r.deep_min} rem={r.rem_min} light={r.light_min} awake={r.awake_min} />
+                      </td>
+                      <td className="px-4 py-2.5 text-xs text-[#8B0057]">{r.deep_min}m</td>
+                      <td className="px-4 py-2.5 text-xs text-[#B5006E]">{r.rem_min}m</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
+
       </main>
     </AppShell>
   );

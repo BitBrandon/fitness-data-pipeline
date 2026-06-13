@@ -46,7 +46,7 @@ SHEET_HEADERS = {
     "prs": ["user_id", "exercise", "pr_weight", "date"],
     "weekly_volume": ["user_id", "week", "total_volume", "total_sets"],
     "exercise_summary": ["user_id", "exercise", "total_sets", "max_weight", "total_volume"],
-    "users": ["username", "password", "csv_path"],
+    "users": ["username", "password", "csv_path", "hevy_api_key"],
     # Google Fit
     "daily_activity": ["user_id", "date", "steps", "calories", "active_minutes"],
     "heart_rate_daily": ["user_id", "date", "hr_avg", "hr_max", "hr_min"],
@@ -131,6 +131,8 @@ def get_or_create_prepared_worksheet(spreadsheet_name, worksheet_name, rows=1000
                 padded_headers[0] = "username"
                 padded_headers[1] = "password"
                 padded_headers[2] = "csv_path"
+                if len(padded_headers) > 3:
+                    padded_headers[3] = "hevy_api_key"
                 sheet.update("A1", [padded_headers])
         else:
             ensure_sheet_headers(sheet, expected_headers)

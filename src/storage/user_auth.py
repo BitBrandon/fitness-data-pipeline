@@ -68,6 +68,15 @@ def validate_user_password(username, password):
     return str(record.get("password")) == password
 
 
+def get_user_hevy_api_key(username: str) -> str | None:
+    """Return the user's Hevy API key from the users sheet, or None if not set."""
+    record = get_user_record(username)
+    if not record:
+        return None
+    key = str(record.get("hevy_api_key") or "").strip()
+    return key or None
+
+
 def get_user_csv_path(username):
     record = get_user_record(username)
 

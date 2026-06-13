@@ -10,6 +10,7 @@ from src.api_server.routes.activity import router as activity_router
 from src.api_server.routes.heart_rate import router as heart_rate_router
 from src.api_server.routes.sleep import router as sleep_router
 from src.api_server.routes.sync import router as sync_router, _run_sync
+from src.api_server.routes.webhooks import router as webhooks_router
 from src.api_server.routes.weight import router as weight_router
 from src.api_server.routes.workouts import router as workouts_router
 
@@ -76,6 +77,7 @@ app.include_router(sleep_router)
 app.include_router(weight_router)
 app.include_router(workouts_router)
 app.include_router(sync_router)
+app.include_router(webhooks_router)
 
 
 @app.get("/health")

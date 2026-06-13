@@ -1,7 +1,6 @@
 import time
 from fastapi import APIRouter, BackgroundTasks, Depends
 from src.api_server.deps import get_current_user
-from src.storage.user_auth import get_user_csv_path
 
 router = APIRouter(prefix="/sync", tags=["sync"])
 
@@ -49,15 +48,18 @@ def _run_sync(username: str, days: int):
             append_new_dataframe("sleep", pd.DataFrame(rows), username, ["user_id", "date"])
         _set(username, pct=60, step=f"Sueño: {len(rows)} noches procesadas")
 
-        # Hevy workouts
-        csv_path = get_user_csv_path(username)
-        if csv_path:
-            _set(username, pct=70, step="Sincronizando entrenos (Hevy)...")
-            from src.etl.sync_hevy import main as sync_hevy
-            sync_hevy(username, csv_path)
-            _set(username, pct=85, step="Entrenos actualizados")
+        # Hevy workouts (live API)
+        _set(username, pct=70, step="Sincronizando entrenos (Hevy API)...")
+        from src.etl.hevy_api_sync import sync_all_hevy
+        from src.storage.user_auth import get_user_hevy_api_key
+        import os as _os
+        api_key = get_user_hevy_api_key(username) or _os.getenv("HEVY_API_KEY", "")
+        if api_key:
+            counts = sync_all_hevy(user_id=username, api_key=api_key)
+            new_sets = counts.get("workouts", 0)
+            _set(username, pct=85, step=f"Entrenos: {new_sets} sets nuevos")
         else:
-            _set(username, pct=85, step="Hevy: sin CSV configurado, omitido")
+            _set(username, pct=85, step="Hevy: sin API key configurada, omitido")
 
         _set(username, pct=100, step="¡Sincronización completada!", state="done")
 
